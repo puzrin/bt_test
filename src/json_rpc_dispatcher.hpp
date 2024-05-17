@@ -111,43 +111,31 @@ struct is_allowed_type<T, AllowedTypes> {
 
 // Helper to check if JSON value matches expected type
 template<typename T>
-bool is_json_type(const JsonVariant& value);
+struct is_json_type_helper;
 
-template<>
-bool is_json_type<int8_t>(const JsonVariant& value) { return value.is<int8_t>(); }
+#define DEFINE_IS_JSON_TYPE(type, method) \
+    template<> \
+    struct is_json_type_helper<type> { \
+        static bool check(const JsonVariant& value) { return value.is<type>(); } \
+    };
 
-template<>
-bool is_json_type<uint8_t>(const JsonVariant& value) { return value.is<uint8_t>(); }
+DEFINE_IS_JSON_TYPE(int8_t, is<int8_t>)
+DEFINE_IS_JSON_TYPE(uint8_t, is<uint8_t>)
+DEFINE_IS_JSON_TYPE(int16_t, is<int16_t>)
+DEFINE_IS_JSON_TYPE(uint16_t, is<uint16_t>)
+DEFINE_IS_JSON_TYPE(int32_t, is<int32_t>)
+DEFINE_IS_JSON_TYPE(uint32_t, is<uint32_t>)
+DEFINE_IS_JSON_TYPE(int64_t, is<int64_t>)
+DEFINE_IS_JSON_TYPE(uint64_t, is<uint64_t>)
+DEFINE_IS_JSON_TYPE(float, is<float>)
+DEFINE_IS_JSON_TYPE(double, is<double>)
+DEFINE_IS_JSON_TYPE(std::string, is<std::string>)
+DEFINE_IS_JSON_TYPE(bool, is<bool>)
 
-template<>
-bool is_json_type<int16_t>(const JsonVariant& value) { return value.is<int16_t>(); }
-
-template<>
-bool is_json_type<uint16_t>(const JsonVariant& value) { return value.is<uint16_t>(); }
-
-template<>
-bool is_json_type<int32_t>(const JsonVariant& value) { return value.is<int32_t>(); }
-
-template<>
-bool is_json_type<uint32_t>(const JsonVariant& value) { return value.is<uint32_t>(); }
-
-template<>
-bool is_json_type<int64_t>(const JsonVariant& value) { return value.is<int64_t>(); }
-
-template<>
-bool is_json_type<uint64_t>(const JsonVariant& value) { return value.is<uint64_t>(); }
-
-template<>
-bool is_json_type<float>(const JsonVariant& value) { return value.is<float>(); }
-
-template<>
-bool is_json_type<double>(const JsonVariant& value) { return value.is<double>(); }
-
-template<>
-bool is_json_type<std::string>(const JsonVariant& value) { return value.is<std::string>(); }
-
-template<>
-bool is_json_type<bool>(const JsonVariant& value) { return value.is<bool>(); }
+template<typename T>
+bool is_json_type(const JsonVariant& value) {
+    return is_json_type_helper<T>::check(value);
+}
 
 template<typename First>
 bool check_argument_types_impl(const JsonArray& args, std::size_t index) {
