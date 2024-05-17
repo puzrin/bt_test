@@ -113,24 +113,24 @@ struct is_allowed_type<T, AllowedTypes> {
 template<typename T>
 struct is_json_type_helper;
 
-#define DEFINE_IS_JSON_TYPE(type, method) \
+#define DEFINE_IS_JSON_TYPE(type) \
     template<> \
     struct is_json_type_helper<type> { \
         static bool check(const JsonVariant& value) { return value.is<type>(); } \
     };
 
-DEFINE_IS_JSON_TYPE(int8_t, is<int8_t>)
-DEFINE_IS_JSON_TYPE(uint8_t, is<uint8_t>)
-DEFINE_IS_JSON_TYPE(int16_t, is<int16_t>)
-DEFINE_IS_JSON_TYPE(uint16_t, is<uint16_t>)
-DEFINE_IS_JSON_TYPE(int32_t, is<int32_t>)
-DEFINE_IS_JSON_TYPE(uint32_t, is<uint32_t>)
-DEFINE_IS_JSON_TYPE(int64_t, is<int64_t>)
-DEFINE_IS_JSON_TYPE(uint64_t, is<uint64_t>)
-DEFINE_IS_JSON_TYPE(float, is<float>)
-DEFINE_IS_JSON_TYPE(double, is<double>)
-DEFINE_IS_JSON_TYPE(std::string, is<std::string>)
-DEFINE_IS_JSON_TYPE(bool, is<bool>)
+DEFINE_IS_JSON_TYPE(int8_t)
+DEFINE_IS_JSON_TYPE(uint8_t)
+DEFINE_IS_JSON_TYPE(int16_t)
+DEFINE_IS_JSON_TYPE(uint16_t)
+DEFINE_IS_JSON_TYPE(int32_t)
+DEFINE_IS_JSON_TYPE(uint32_t)
+DEFINE_IS_JSON_TYPE(int64_t)
+DEFINE_IS_JSON_TYPE(uint64_t)
+DEFINE_IS_JSON_TYPE(float)
+DEFINE_IS_JSON_TYPE(double)
+DEFINE_IS_JSON_TYPE(std::string)
+DEFINE_IS_JSON_TYPE(bool)
 
 template<typename T>
 bool is_json_type(const JsonVariant& value) {
