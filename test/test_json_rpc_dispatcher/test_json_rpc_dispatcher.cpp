@@ -66,6 +66,52 @@ void test_unknown_method() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
+// Test bad input with no method
+void test_no_method_prop() {
+    JsonRpcDispatcher dispatcher;
+
+    std::string input = R"({"args": []})";
+    std::string expected = R"({"ok":false,"result":"Method not found"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+// Test bad input with wrong method prop type
+void test_method_prop_wrong_type() {
+    JsonRpcDispatcher dispatcher;
+
+    std::string input = R"({"method": [], "args": []})";
+    std::string expected = R"({"ok":false,"result":"Method not found"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+// Test bad input with no args
+void test_no_args_prop() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("add_8bits", add_8bits);
+
+    std::string input = R"({"method": "add_8bits"})";
+    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+// Test bad input with wrong args prop type
+void test_args_prop_wrong_type() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("add_8bits", add_8bits);
+
+    std::string input = R"({"method": "add_8bits", "args": 5})";
+    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
 // Test args overflow
 void test_args_overflow() {
     JsonRpcDispatcher dispatcher;
@@ -168,6 +214,10 @@ int main(int, char **) {
     RUN_TEST(test_string_data);
     // RUN_TEST(test_string_by_ref_data);
     RUN_TEST(test_unknown_method);
+    RUN_TEST(test_no_method_prop);
+    RUN_TEST(test_method_prop_wrong_type);
+    RUN_TEST(test_no_args_prop);
+    RUN_TEST(test_args_prop_wrong_type);
     RUN_TEST(test_args_overflow);
     RUN_TEST(test_add_wrong_arg_type_float);
     RUN_TEST(test_add_wrong_arg_type_string);
