@@ -6,13 +6,12 @@
 #include <functional>
 #include <tuple>
 #include <type_traits>
-#include <nlohmann/json.hpp>
+#include <ArduinoJson.h>
 #include <cstdint>
 
 namespace jrcpd {
 
-// Local implementation of index_sequence and make_index_sequence,
-// for esp32 toolchain compatibility
+// Local implementation of index_sequence and make_index_sequence, for esp32 toolchain compatibility
 template<std::size_t... Is>
 struct index_sequence {};
 
@@ -32,12 +31,12 @@ struct is_callable {
 
 // Convert JSON to tuple
 template<typename... Args, std::size_t... Is>
-std::tuple<Args...> json_to_tuple_impl(const nlohmann::json& j, index_sequence<Is...>) {
-    return std::make_tuple(j.at(Is).template get<typename std::decay<Args>::type>()...);
+std::tuple<Args...> json_to_tuple_impl(const JsonArray& j, index_sequence<Is...>) {
+    return std::make_tuple(j[Is].as<typename std::decay<Args>::type>()...);
 }
 
 template<typename... Args>
-std::tuple<Args...> json_to_tuple(const nlohmann::json& j) {
+std::tuple<Args...> json_to_tuple(const JsonArray& j) {
     return json_to_tuple_impl<Args...>(j, make_index_sequence<sizeof...(Args)>{});
 }
 
@@ -83,8 +82,12 @@ struct contains_reference<First, Rest...> {
 // Helper to generate JSON response
 template<typename T>
 std::string generate_response(bool status, const T& result) {
-    nlohmann::json response = {{"ok", status}, {"result", result}};
-    return response.dump();
+    JsonDocument doc;
+    doc["ok"] = status;
+    doc["result"] = result;
+    std::string output;
+    serializeJson(doc, output);
+    return output;
 }
 
 // List of allowed types for method arguments and return values
@@ -106,6 +109,61 @@ struct is_allowed_type<T, AllowedTypes> {
     static const bool value = is_allowed_type<T, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string, bool>::value;
 };
 
+// Helper to check if JSON value matches expected type
+template<typename T>
+bool is_json_type(const JsonVariant& value);
+
+template<>
+bool is_json_type<int8_t>(const JsonVariant& value) { return value.is<int8_t>(); }
+
+template<>
+bool is_json_type<uint8_t>(const JsonVariant& value) { return value.is<uint8_t>(); }
+
+template<>
+bool is_json_type<int16_t>(const JsonVariant& value) { return value.is<int16_t>(); }
+
+template<>
+bool is_json_type<uint16_t>(const JsonVariant& value) { return value.is<uint16_t>(); }
+
+template<>
+bool is_json_type<int32_t>(const JsonVariant& value) { return value.is<int32_t>(); }
+
+template<>
+bool is_json_type<uint32_t>(const JsonVariant& value) { return value.is<uint32_t>(); }
+
+template<>
+bool is_json_type<int64_t>(const JsonVariant& value) { return value.is<int64_t>(); }
+
+template<>
+bool is_json_type<uint64_t>(const JsonVariant& value) { return value.is<uint64_t>(); }
+
+template<>
+bool is_json_type<float>(const JsonVariant& value) { return value.is<float>(); }
+
+template<>
+bool is_json_type<double>(const JsonVariant& value) { return value.is<double>(); }
+
+template<>
+bool is_json_type<std::string>(const JsonVariant& value) { return value.is<std::string>(); }
+
+template<>
+bool is_json_type<bool>(const JsonVariant& value) { return value.is<bool>(); }
+
+template<typename First>
+bool check_argument_types_impl(const JsonArray& args, std::size_t index) {
+    return is_json_type<First>(args[index]);
+}
+
+template<typename First, typename Second, typename... Rest>
+bool check_argument_types_impl(const JsonArray& args, std::size_t index) {
+    return is_json_type<First>(args[index]) && check_argument_types_impl<Second, Rest...>(args, index + 1);
+}
+
+template<typename... Args>
+bool check_argument_types(const JsonArray& args) {
+    return check_argument_types_impl<Args...>(args, 0);
+}
+
 } // namespace jrcpd
 
 class JsonRpcDispatcher {
@@ -126,13 +184,14 @@ public:
         static_assert(jrcpd::is_allowed_type<Ret, jrcpd::AllowedTypes>::value, "Return type is not allowed");
         static_assert(jrcpd::is_allowed_type<typename std::tuple_element<0, ArgsTuple>::type, jrcpd::AllowedTypes>::value, "Argument type is not allowed");
 
-        functions[name] = [func](const nlohmann::json& args) -> std::string {
+        functions[name] = [func](const JsonArray& args) -> std::string {
             try {
+                if (!jrcpd::check_argument_types<typename std::tuple_element<0, ArgsTuple>::type, typename std::tuple_element<1, ArgsTuple>::type>(args)) {
+                    throw std::runtime_error("Argument type mismatch");
+                }
                 auto tpl_args = jrcpd::json_to_tuple<typename std::tuple_element<0, ArgsTuple>::type, typename std::tuple_element<1, ArgsTuple>::type>(args);
                 Ret result = jrcpd::invoke(func, tpl_args);
                 return jrcpd::generate_response(true, result);
-            } catch (const nlohmann::json::type_error&) {
-                return jrcpd::generate_response(false, "Argument type mismatch");
             } catch (const std::exception& e) {
                 return jrcpd::generate_response(false, e.what());
             }
@@ -147,7 +206,7 @@ public:
 
         static_assert(jrcpd::is_allowed_type<Ret, jrcpd::AllowedTypes>::value, "Return type is not allowed");
 
-        functions[name] = [func](const nlohmann::json& /*args*/) -> std::string {
+        functions[name] = [func](const JsonArray& /*args*/) -> std::string {
             try {
                 Ret result = func();
                 return jrcpd::generate_response(true, result);
@@ -158,25 +217,26 @@ public:
     }
 
     std::string dispatch(const std::string& input) {
-        try {
-            nlohmann::json request = nlohmann::json::parse(input);
-            std::string method = request.at("method");
-            nlohmann::json args = request.at("args");
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, input);
+        if (error) {
+            return jrcpd::generate_response(false, error.c_str());
+        }
 
-            auto it = functions.find(method);
-            if (it != functions.end()) {
-                std::string result = it->second(args);
-                return result;
-            } else {
-                return jrcpd::generate_response(false, "Method not found");
-            }
-        } catch (const std::exception& e) {
-            return jrcpd::generate_response(false, e.what());
+        std::string method = doc["method"].as<std::string>();
+        JsonArray args = doc["args"].as<JsonArray>();
+
+        auto it = functions.find(method);
+        if (it != functions.end()) {
+            std::string result = it->second(args);
+            return result;
+        } else {
+            return jrcpd::generate_response(false, "Method not found");
         }
     }
 
 private:
-    std::unordered_map<std::string, std::function<std::string(const nlohmann::json&)>> functions;
+    std::unordered_map<std::string, std::function<std::string(const JsonArray&)>> functions;
 };
 
 #endif // JSON_RPC_DISPATCHER_HPP

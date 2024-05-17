@@ -73,8 +73,8 @@ void test_args_overflow() {
 
     // JSON input with arguments 512 and 512, which are beyond the range of int8_t (-128 to 127).
     std::string input = R"({"method": "add_8bits", "args": [512, 512]})";
-    // The expected result is 0 because the values 512 will wrap around in int8_t to 0 (since 512 % 256 = 0).
-    std::string expected = R"({"ok":true,"result":0})";
+    // Current implementation consider that as wrong data type for simplicity.
+    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
@@ -86,8 +86,8 @@ void test_add_wrong_arg_type_float() {
     dispatcher.addMethod("add_8bits", add_8bits);
 
     std::string input = R"({"method": "add_8bits", "args": [1, 2.5]})";
-    // The expected result is 3 because the float will be truncated to 2.
-    std::string expected = R"({"ok":true,"result":3})";
+    // Current implementation consider that as wrong data type for simplicity.
+    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());

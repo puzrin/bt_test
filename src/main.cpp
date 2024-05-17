@@ -2,8 +2,6 @@
 #include <string>
 #include "json_rpc_dispatcher.hpp"
 
-using json = nlohmann::json;
-
 // Example functions
 int add(int a, int b) {
     return a + b;
