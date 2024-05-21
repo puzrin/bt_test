@@ -203,6 +203,34 @@ void test_no_args() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
+int throw_exception() {
+    throw std::runtime_error("Test exception");
+}
+
+// Test method throws exception
+void test_method_throws_exception() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("throw_exception", throw_exception);
+
+    std::string input = R"({"method": "throw_exception", "args": []})";
+    std::string expected = R"({"ok":false,"result":"Test exception"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+// Test broken JSON input
+void test_broken_json_input() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("add_8bits", add_8bits);
+
+    std::string input = R"({"method": "add_8bits", "args": [1, 2)"; // Missing closing brace
+    std::string expected = R"({"ok":false,"result":"IncompleteInput"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
 // Setup and teardown functions
 void setUp() {}
 void tearDown() {}
@@ -225,5 +253,7 @@ int main(int, char **) {
     RUN_TEST(test_concat_wrong_arg_type_int);
     RUN_TEST(test_concat_wrong_arg_type_null);
     RUN_TEST(test_no_args);
+    RUN_TEST(test_method_throws_exception);
+    RUN_TEST(test_broken_json_input);
     return UNITY_END();
 }
