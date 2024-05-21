@@ -31,8 +31,8 @@ int main() {
 }
 
 */
-#ifndef JSON_RPC_DISPATCHER_HPP
-#define JSON_RPC_DISPATCHER_HPP
+
+#pragma once
 
 #include <string>
 #include <unordered_map>
@@ -44,7 +44,12 @@ int main() {
 
 namespace jrcpd {
 
-// Local implementation of index_sequence and make_index_sequence, for esp32 toolchain compatibility
+//
+// Local implementation of some `std` features, for c++11 support and
+// for esp32 toolchain compatibility
+//
+
+// ::index_sequence && ::make_index_sequence
 template<std::size_t... Is>
 struct index_sequence {};
 
@@ -54,34 +59,100 @@ struct make_index_sequence : make_index_sequence<N-1, N-1, Is...> {};
 template<std::size_t... Is>
 struct make_index_sequence<0, Is...> : index_sequence<Is...> {};
 
-template<typename F, typename... Args>
-struct is_callable {
-    template<typename U> static auto test(U* p) -> decltype((*p)(std::declval<Args>()...), void(), std::true_type());
-    template<typename U> static auto test(...) -> decltype(std::false_type());
+// tuple_element_t
+template <std::size_t I, typename Tuple>
+struct tuple_element;
 
-    static constexpr bool value = decltype(test<F>(0))::value;
+template <std::size_t I, typename Head, typename... Tail>
+struct tuple_element<I, std::tuple<Head, Tail...>> : tuple_element<I-1, std::tuple<Tail...>> {};
+
+template <typename Head, typename... Tail>
+struct tuple_element<0, std::tuple<Head, Tail...>> {
+    using type = Head;
 };
 
+template <std::size_t I, typename Tuple>
+using tuple_element_t = typename tuple_element<I, Tuple>::type;
+
+// ::apply
+template<typename F, typename Tuple, std::size_t... Is>
+auto apply_impl(F&& f, Tuple&& t, index_sequence<Is...>) -> decltype(f(std::get<Is>(std::forward<Tuple>(t))...)) {
+    return f(std::get<Is>(std::forward<Tuple>(t))...);
+}
+
+template<typename F, typename Tuple>
+auto apply(F&& f, Tuple&& t) -> decltype(apply_impl(std::forward<F>(f), std::forward<Tuple>(t), make_index_sequence<std::tuple_size<typename std::decay<Tuple>::type>::value>{})) {
+    constexpr auto Size = std::tuple_size<typename std::decay<Tuple>::type>::value;
+    return apply_impl(std::forward<F>(f), std::forward<Tuple>(t), make_index_sequence<Size>{});
+}
+
+//
+// We can support only certain types for arguments and return values in
+// RPC methods. This is a compile-time check for that.
+//
+
+// Define a type trait to check if a type of arguments / return are suported
+template <typename T>
+struct is_supported_type : std::false_type {};
+
+#define SUPPORTED_TYPE(type) template <> struct is_supported_type<type> : std::true_type {}
+
+SUPPORTED_TYPE(int8_t);
+SUPPORTED_TYPE(uint8_t);
+SUPPORTED_TYPE(int16_t);
+SUPPORTED_TYPE(uint16_t);
+SUPPORTED_TYPE(int32_t);
+SUPPORTED_TYPE(uint32_t);
+SUPPORTED_TYPE(int64_t);
+SUPPORTED_TYPE(uint64_t);
+SUPPORTED_TYPE(float);
+SUPPORTED_TYPE(double);
+SUPPORTED_TYPE(std::string);
+SUPPORTED_TYPE(bool);
+
+#undef SUPPORTED_TYPE
+
+template <typename... Args>
+struct are_all_types_supported;
+
+template <>
+struct are_all_types_supported<> : std::true_type {};
+
+template <typename T, typename... Rest>
+struct are_all_types_supported<T, Rest...>
+    : std::integral_constant<bool, is_supported_type<T>::value && are_all_types_supported<Rest...>::value> {};
+
+template <typename Tuple, std::size_t... Is>
+constexpr bool check_all_types_supported_impl(index_sequence<Is...>) {
+    return are_all_types_supported<tuple_element_t<Is, Tuple>...>::value;
+}
+
+template <typename Tuple>
+constexpr bool check_all_types_supported() {
+    return check_all_types_supported_impl<Tuple>(make_index_sequence<std::tuple_size<Tuple>::value>{});
+}
+
 // Convert JSON to tuple
+/*
 template<typename... Args, std::size_t... Is>
-std::tuple<Args...> json_to_tuple_impl(const JsonArray& j, index_sequence<Is...>) {
-    return std::make_tuple(j[Is].as<typename std::decay<Args>::type>()...);
+std::tuple<Args...> from_json(const JsonArray& j, index_sequence<Is...>) {
+    return { j[Is].as<typename std::decay<Args>::type>()... };
 }
 
 template<typename... Args>
-std::tuple<Args...> json_to_tuple(const JsonArray& j) {
-    return json_to_tuple_impl<Args...>(j, make_index_sequence<sizeof...(Args)>{});
+std::tuple<Args...> from_json(const JsonArray& j) {
+    return from_json<Args...>(j, make_index_sequence<sizeof...(Args)>{});
+}
+*/
+
+template<typename ArgsTuple, std::size_t... Is>
+ArgsTuple from_json_impl(const JsonArray& j, index_sequence<Is...>) {
+    return std::make_tuple(j[Is].template as<typename std::tuple_element<Is, ArgsTuple>::type>()...);
 }
 
-// Invoke function with tuple arguments
-template<typename Func, typename Tuple, std::size_t... Is>
-auto invoke_impl(Func func, Tuple& args, index_sequence<Is...>) -> decltype(func(std::get<Is>(args)...)) {
-    return func(std::get<Is>(args)...);
-}
-
-template<typename Func, typename Tuple>
-auto invoke(Func func, Tuple& args) -> decltype(invoke_impl(func, args, make_index_sequence<std::tuple_size<Tuple>::value>{})) {
-    return invoke_impl(func, args, make_index_sequence<std::tuple_size<Tuple>::value>{});
+template<typename ArgsTuple>
+ArgsTuple from_json(const JsonArray& j) {
+    return from_json_impl<ArgsTuple>(j, make_index_sequence<std::tuple_size<ArgsTuple>::value>{});
 }
 
 // Extract argument types from function
@@ -100,18 +171,6 @@ struct function_traits<std::function<Ret(Args...)>> {
     using argument_types = std::tuple<Args...>;
 };
 
-// Helper to check if any of the argument types are references
-template<typename... Args>
-struct contains_reference;
-
-template<>
-struct contains_reference<> : std::false_type {};
-
-template<typename First, typename... Rest>
-struct contains_reference<First, Rest...> {
-    static const bool value = std::is_reference<First>::value || contains_reference<Rest...>::value;
-};
-
 // Helper to generate JSON response
 template<typename T>
 std::string generate_response(bool status, const T& result) {
@@ -123,67 +182,23 @@ std::string generate_response(bool status, const T& result) {
     return output;
 }
 
-// List of allowed types for method arguments and return values
-// We support only flat types for RPC calls to keep things simple
-using AllowedTypes = std::tuple<int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string, bool>;
-
-// Helper to check if a type is in a list of allowed types
-template<typename T, typename... Allowed>
-struct is_allowed_type : std::false_type {};
-
-template<typename T, typename First, typename... Rest>
-struct is_allowed_type<T, First, Rest...> : std::conditional<std::is_same<T, First>::value, std::true_type, is_allowed_type<T, Rest...>>::type {};
-
-template<typename T>
-struct is_allowed_type<T> : std::false_type {};
-
-template<typename T>
-struct is_allowed_type<T, AllowedTypes> {
-    static const bool value = is_allowed_type<T, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, float, double, std::string, bool>::value;
+// Helper struct to check argument types
+template<typename ArgsTuple, std::size_t I = 0, std::size_t N = std::tuple_size<ArgsTuple>::value>
+struct TypeChecker {
+    static bool check(const JsonArray& args) {
+        if (!args[I].template is<typename std::tuple_element<I, ArgsTuple>::type>()) {
+            return false;
+        }
+        return TypeChecker<ArgsTuple, I + 1, N>::check(args);
+    }
 };
 
-// Helper to check if JSON value matches expected type
-template<typename T>
-struct is_json_type_helper;
-
-#define DEFINE_IS_JSON_TYPE(type) \
-    template<> \
-    struct is_json_type_helper<type> { \
-        static bool check(const JsonVariant& value) { return value.is<type>(); } \
-    };
-
-DEFINE_IS_JSON_TYPE(int8_t)
-DEFINE_IS_JSON_TYPE(uint8_t)
-DEFINE_IS_JSON_TYPE(int16_t)
-DEFINE_IS_JSON_TYPE(uint16_t)
-DEFINE_IS_JSON_TYPE(int32_t)
-DEFINE_IS_JSON_TYPE(uint32_t)
-DEFINE_IS_JSON_TYPE(int64_t)
-DEFINE_IS_JSON_TYPE(uint64_t)
-DEFINE_IS_JSON_TYPE(float)
-DEFINE_IS_JSON_TYPE(double)
-DEFINE_IS_JSON_TYPE(std::string)
-DEFINE_IS_JSON_TYPE(bool)
-
-template<typename T>
-bool is_json_type(const JsonVariant& value) {
-    return is_json_type_helper<T>::check(value);
-}
-
-template<typename First>
-bool check_argument_types_impl(const JsonArray& args, std::size_t index) {
-    return is_json_type<First>(args[index]);
-}
-
-template<typename First, typename Second, typename... Rest>
-bool check_argument_types_impl(const JsonArray& args, std::size_t index) {
-    return is_json_type<First>(args[index]) && check_argument_types_impl<Second, Rest...>(args, index + 1);
-}
-
-template<typename... Args>
-bool check_argument_types(const JsonArray& args) {
-    return check_argument_types_impl<Args...>(args, 0);
-}
+template<typename ArgsTuple, std::size_t N>
+struct TypeChecker<ArgsTuple, N, N> {
+    static bool check(const JsonArray&) {
+        return true;
+    }
+};
 
 } // namespace jrcpd
 
@@ -192,44 +207,30 @@ public:
     JsonRpcDispatcher() = default;
 
     // For functions with arguments
-    template<typename Func, typename std::enable_if<!jrcpd::is_callable<Func>::value, int>::type = 0>
+    template<typename Func>
     void addMethod(const std::string& name, Func func) {
         using traits = jrcpd::function_traits<decltype(func)>;
         using Ret = typename traits::return_type;
         using ArgsTuple = typename traits::argument_types;
 
-        static_assert(!std::is_same<Ret, void>::value, "Return type must be JSON-compatible");
-        static_assert(!jrcpd::contains_reference<typename std::tuple_element<0, ArgsTuple>::type, typename std::tuple_element<1, ArgsTuple>::type>::value, "Arguments cannot be references");
+        static_assert(!std::is_same<Ret, void>::value, "void functions not supported");
 
-        // Ensure the return type and argument types are from the allowed types list
-        static_assert(jrcpd::is_allowed_type<Ret, jrcpd::AllowedTypes>::value, "Return type is not allowed");
-        static_assert(jrcpd::is_allowed_type<typename std::tuple_element<0, ArgsTuple>::type, jrcpd::AllowedTypes>::value, "Argument type is not allowed");
+        static_assert(jrcpd::is_supported_type<Ret>::value, "Return type is not allowed");
+        static_assert(jrcpd::check_all_types_supported<ArgsTuple>(), "Argument type is not allowed");
 
         functions[name] = [func](const JsonArray& args) -> std::string {
             try {
-                if (!jrcpd::check_argument_types<typename std::tuple_element<0, ArgsTuple>::type, typename std::tuple_element<1, ArgsTuple>::type>(args)) {
+                if (args.size() != std::tuple_size<ArgsTuple>::value) {
+                    throw std::runtime_error("Number of arguments mismatch");
+                }
+
+                // Check if each argument in JsonArray can hold the appropriate type from ArgsTuple
+                if (!jrcpd::TypeChecker<ArgsTuple>::check(args)) {
                     throw std::runtime_error("Argument type mismatch");
                 }
-                auto tpl_args = jrcpd::json_to_tuple<typename std::tuple_element<0, ArgsTuple>::type, typename std::tuple_element<1, ArgsTuple>::type>(args);
-                Ret result = jrcpd::invoke(func, tpl_args);
-                return jrcpd::generate_response(true, result);
-            } catch (const std::exception& e) {
-                return jrcpd::generate_response(false, e.what());
-            }
-        };
-    }
 
-    // For functions without arguments
-    template<typename Func, typename std::enable_if<jrcpd::is_callable<Func>::value, int>::type = 0>
-    void addMethod(const std::string& name, Func func) {
-        using traits = jrcpd::function_traits<decltype(func)>;
-        using Ret = typename traits::return_type;
-
-        static_assert(jrcpd::is_allowed_type<Ret, jrcpd::AllowedTypes>::value, "Return type is not allowed");
-
-        functions[name] = [func](const JsonArray& /*args*/) -> std::string {
-            try {
-                Ret result = func();
+                auto tpl_args = jrcpd::from_json<ArgsTuple>(args);
+                Ret result = jrcpd::apply(func, tpl_args);
                 return jrcpd::generate_response(true, result);
             } catch (const std::exception& e) {
                 return jrcpd::generate_response(false, e.what());
@@ -259,5 +260,3 @@ public:
 private:
     std::unordered_map<std::string, std::function<std::string(const JsonArray&)>> functions;
 };
-
-#endif // JSON_RPC_DISPATCHER_HPP

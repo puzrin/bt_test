@@ -7,17 +7,9 @@
 #include "json_rpc_dispatcher.hpp"
 
 // Example functions for testing
-int8_t add_8bits(int8_t a, int8_t b) {
-    return a + b;
-}
+int8_t add_8bits(int8_t a, int8_t b) { return a + b; }
 
-std::string concat(std::string a, std::string b) {
-    return a + b;
-}
-
-std::string concat_by_ref(const std::string& a, const std::string& b) {
-    return a + b;
-}
+std::string concat(std::string a, std::string b) { return a + b; }
 
 // Test 8bits data method
 void test_8bits_data() {
@@ -43,8 +35,14 @@ void test_string_data() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
-// Test &string data method
-/*void test_string_by_ref_data() {
+/*
+// Test string data method, when passed by reference
+std::string concat_by_ref(const std::string& a, const std::string& b) {
+    std::string result = a + b;
+    return result;
+}
+
+void test_string_by_ref_data() {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat_by_ref);
 
@@ -53,7 +51,8 @@ void test_string_data() {
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
-}*/
+}
+*/
 
 // Test unknown method
 void test_unknown_method() {
@@ -94,7 +93,7 @@ void test_no_args_prop() {
     dispatcher.addMethod("add_8bits", add_8bits);
 
     std::string input = R"({"method": "add_8bits"})";
-    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
+    std::string expected = R"({"ok":false,"result":"Number of arguments mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
@@ -106,7 +105,7 @@ void test_args_prop_wrong_type() {
     dispatcher.addMethod("add_8bits", add_8bits);
 
     std::string input = R"({"method": "add_8bits", "args": 5})";
-    std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
+    std::string expected = R"({"ok":false,"result":"Number of arguments mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
@@ -187,11 +186,9 @@ void test_concat_wrong_arg_type_null() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
-int noargs() {
-    return 5;
-}
-
 // Test no parameters
+int noargs() { return 5; }
+
 void test_no_args() {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("noparams", noargs);
@@ -214,6 +211,36 @@ void test_method_throws_exception() {
 
     std::string input = R"({"method": "throw_exception", "args": []})";
     std::string expected = R"({"ok":false,"result":"Test exception"})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+int one_argument(int a) {
+    return a * 2;
+}
+
+void test_one_argument() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("one_argument", one_argument);
+
+    std::string input = R"({"method": "one_argument", "args": [2]})";
+    std::string expected = R"({"ok":true,"result":4})";
+    std::string result = dispatcher.dispatch(input);
+
+    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+}
+
+int three_arguments(int a, int b, int c) {
+    return a + b + c;
+}
+
+void test_three_arguments() {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("three_arguments", three_arguments);
+
+    std::string input = R"({"method": "three_arguments", "args": [1, 2, 3]})";
+    std::string expected = R"({"ok":true,"result":6})";
     std::string result = dispatcher.dispatch(input);
 
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
@@ -254,6 +281,8 @@ int main(int, char **) {
     RUN_TEST(test_concat_wrong_arg_type_null);
     RUN_TEST(test_no_args);
     RUN_TEST(test_method_throws_exception);
+    RUN_TEST(test_one_argument);
+    RUN_TEST(test_three_arguments);
     RUN_TEST(test_broken_json_input);
     return UNITY_END();
 }
