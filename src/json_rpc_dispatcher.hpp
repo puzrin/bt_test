@@ -59,7 +59,7 @@ struct make_index_sequence : make_index_sequence<N-1, N-1, Is...> {};
 template<std::size_t... Is>
 struct make_index_sequence<0, Is...> : index_sequence<Is...> {};
 
-// tuple_element_t
+// ::tuple_element_t
 template <std::size_t I, typename Tuple>
 struct tuple_element;
 
@@ -186,18 +186,14 @@ std::string generate_response(bool status, const T& result) {
 template<typename ArgsTuple, std::size_t I = 0, std::size_t N = std::tuple_size<ArgsTuple>::value>
 struct TypeChecker {
     static bool check(const JsonArray& args) {
-        if (!args[I].template is<typename std::tuple_element<I, ArgsTuple>::type>()) {
-            return false;
-        }
+        if (!args[I].template is<typename std::tuple_element<I, ArgsTuple>::type>()) return false;
         return TypeChecker<ArgsTuple, I + 1, N>::check(args);
     }
 };
 
 template<typename ArgsTuple, std::size_t N>
 struct TypeChecker<ArgsTuple, N, N> {
-    static bool check(const JsonArray&) {
-        return true;
-    }
+    static bool check(const JsonArray&) { return true; }
 };
 
 } // namespace jrcpd
