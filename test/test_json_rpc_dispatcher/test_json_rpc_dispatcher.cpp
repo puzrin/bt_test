@@ -1,18 +1,12 @@
-#include <unity.h>
-
-// Undefine isnan and isinf to avoid conflict with nlohmann/json.hpp
-#undef isnan
-#undef isinf
-
+#include <gtest/gtest.h>
 #include "json_rpc_dispatcher.hpp"
 
 // Example functions for testing
 int8_t add_8bits(int8_t a, int8_t b) { return a + b; }
-
 std::string concat(std::string a, std::string b) { return a + b; }
 
 // Test 8bits data method
-void test_8bits_data() {
+TEST(JsonRpcDispatcherTest, Test8BitsData) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -20,11 +14,11 @@ void test_8bits_data() {
     std::string expected = R"({"ok":true,"result":3})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test string data method
-void test_string_data() {
+TEST(JsonRpcDispatcherTest, TestStringData) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
 
@@ -32,63 +26,44 @@ void test_string_data() {
     std::string expected = R"({"ok":true,"result":"hello world"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
-
-/*
-// Test string data method, when passed by reference
-std::string concat_by_ref(const std::string& a, const std::string& b) {
-    std::string result = a + b;
-    return result;
-}
-
-void test_string_by_ref_data() {
-    JsonRpcDispatcher dispatcher;
-    dispatcher.addMethod("concat", concat_by_ref);
-
-    std::string input = R"({"method": "concat", "args": ["hello ", "world"]})";
-    std::string expected = R"({"ok":true,"result":"hello world"})";
-    std::string result = dispatcher.dispatch(input);
-
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
-}
-*/
 
 // Test unknown method
-void test_unknown_method() {
+TEST(JsonRpcDispatcherTest, TestUnknownMethod) {
     JsonRpcDispatcher dispatcher;
 
     std::string input = R"({"method": "unknown", "args": []})";
     std::string expected = R"({"ok":false,"result":"Method not found"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test bad input with no method
-void test_no_method_prop() {
+TEST(JsonRpcDispatcherTest, TestNoMethodProp) {
     JsonRpcDispatcher dispatcher;
 
     std::string input = R"({"args": []})";
     std::string expected = R"({"ok":false,"result":"Method not found"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test bad input with wrong method prop type
-void test_method_prop_wrong_type() {
+TEST(JsonRpcDispatcherTest, TestMethodPropWrongType) {
     JsonRpcDispatcher dispatcher;
 
     std::string input = R"({"method": [], "args": []})";
     std::string expected = R"({"ok":false,"result":"Method not found"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test bad input with no args
-void test_no_args_prop() {
+TEST(JsonRpcDispatcherTest, TestNoArgsProp) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -96,11 +71,11 @@ void test_no_args_prop() {
     std::string expected = R"({"ok":false,"result":"Number of arguments mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test bad input with wrong args prop type
-void test_args_prop_wrong_type() {
+TEST(JsonRpcDispatcherTest, TestArgsPropWrongType) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -108,11 +83,11 @@ void test_args_prop_wrong_type() {
     std::string expected = R"({"ok":false,"result":"Number of arguments mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test args overflow
-void test_args_overflow() {
+TEST(JsonRpcDispatcherTest, TestArgsOverflow) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -122,11 +97,11 @@ void test_args_overflow() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test wrong argument type for add_8bits: float
-void test_add_wrong_arg_type_float() {
+TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeFloat) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -135,11 +110,11 @@ void test_add_wrong_arg_type_float() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test wrong argument type for add_8bits: string
-void test_add_wrong_arg_type_string() {
+TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeString) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -147,11 +122,11 @@ void test_add_wrong_arg_type_string() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test wrong argument type for add_8bits: null
-void test_add_wrong_arg_type_null() {
+TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeNull) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -159,11 +134,11 @@ void test_add_wrong_arg_type_null() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test wrong argument type for concat: int
-void test_concat_wrong_arg_type_int() {
+TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeInt) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
 
@@ -171,11 +146,11 @@ void test_concat_wrong_arg_type_int() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test wrong argument type for concat: null
-void test_concat_wrong_arg_type_null() {
+TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeNull) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
 
@@ -183,11 +158,11 @@ void test_concat_wrong_arg_type_null() {
     std::string expected = R"({"ok":false,"result":"Argument type mismatch"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test no parameters
-void test_no_args() {
+TEST(JsonRpcDispatcherTest, TestNoArgs) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("noparams", [](){ return 5; });
 
@@ -195,11 +170,11 @@ void test_no_args() {
     std::string expected = R"({"ok":true,"result":5})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test method throws exception
-void test_method_throws_exception() {
+TEST(JsonRpcDispatcherTest, TestMethodThrowsException) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("throw_exception", []() -> int { throw std::runtime_error("Test exception"); });
 
@@ -207,10 +182,10 @@ void test_method_throws_exception() {
     std::string expected = R"({"ok":false,"result":"Test exception"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
-void test_one_argument() {
+TEST(JsonRpcDispatcherTest, TestOneArgument) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("one_argument", [](int a) { return a * 2; });
 
@@ -218,10 +193,10 @@ void test_one_argument() {
     std::string expected = R"({"ok":true,"result":4})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
-void test_three_arguments() {
+TEST(JsonRpcDispatcherTest, TestThreeArguments) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("three_arguments", [](int a, int b, int c) { return a + b + c; });
 
@@ -229,11 +204,11 @@ void test_three_arguments() {
     std::string expected = R"({"ok":true,"result":6})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
 // Test broken JSON input
-void test_broken_json_input() {
+TEST(JsonRpcDispatcherTest, TestBrokenJsonInput) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -241,34 +216,11 @@ void test_broken_json_input() {
     std::string expected = R"({"ok":false,"result":"IncompleteInput"})";
     std::string result = dispatcher.dispatch(input);
 
-    TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
+    EXPECT_EQ(expected, result);
 }
 
-// Setup and teardown functions
-void setUp() {}
-void tearDown() {}
-
 // Main function to run the tests
-int main(int, char **) {
-    UNITY_BEGIN();
-    RUN_TEST(test_8bits_data);
-    RUN_TEST(test_string_data);
-    // RUN_TEST(test_string_by_ref_data);
-    RUN_TEST(test_unknown_method);
-    RUN_TEST(test_no_method_prop);
-    RUN_TEST(test_method_prop_wrong_type);
-    RUN_TEST(test_no_args_prop);
-    RUN_TEST(test_args_prop_wrong_type);
-    RUN_TEST(test_args_overflow);
-    RUN_TEST(test_add_wrong_arg_type_float);
-    RUN_TEST(test_add_wrong_arg_type_string);
-    RUN_TEST(test_add_wrong_arg_type_null);
-    RUN_TEST(test_concat_wrong_arg_type_int);
-    RUN_TEST(test_concat_wrong_arg_type_null);
-    RUN_TEST(test_no_args);
-    RUN_TEST(test_method_throws_exception);
-    RUN_TEST(test_one_argument);
-    RUN_TEST(test_three_arguments);
-    RUN_TEST(test_broken_json_input);
-    return UNITY_END();
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
