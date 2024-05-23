@@ -3,15 +3,13 @@
 #include "json_rpc_dispatcher.hpp"
 
 // Example functions
-int add(int a, int b) { return a + b; }
-
 std::string concat(std::string a, std::string b) { return a + b; }
 
 int main() {
     JsonRpcDispatcher dispatcher;
 
     // Add methods
-    dispatcher.addMethod("add", add);
+    dispatcher.addMethod("add", [](int a, int b) { return a + b; });
     dispatcher.addMethod("concat", concat);
 
     // Example usage

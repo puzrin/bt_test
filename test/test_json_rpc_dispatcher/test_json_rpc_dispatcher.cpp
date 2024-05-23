@@ -187,11 +187,9 @@ void test_concat_wrong_arg_type_null() {
 }
 
 // Test no parameters
-int noargs() { return 5; }
-
 void test_no_args() {
     JsonRpcDispatcher dispatcher;
-    dispatcher.addMethod("noparams", noargs);
+    dispatcher.addMethod("noparams", [](){ return 5; });
 
     std::string input = R"({"method": "noparams", "args": []})";
     std::string expected = R"({"ok":true,"result":5})";
@@ -200,14 +198,10 @@ void test_no_args() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
-int throw_exception() {
-    throw std::runtime_error("Test exception");
-}
-
 // Test method throws exception
 void test_method_throws_exception() {
     JsonRpcDispatcher dispatcher;
-    dispatcher.addMethod("throw_exception", throw_exception);
+    dispatcher.addMethod("throw_exception", []() -> int { throw std::runtime_error("Test exception"); });
 
     std::string input = R"({"method": "throw_exception", "args": []})";
     std::string expected = R"({"ok":false,"result":"Test exception"})";
@@ -216,13 +210,9 @@ void test_method_throws_exception() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
-int one_argument(int a) {
-    return a * 2;
-}
-
 void test_one_argument() {
     JsonRpcDispatcher dispatcher;
-    dispatcher.addMethod("one_argument", one_argument);
+    dispatcher.addMethod("one_argument", [](int a) { return a * 2; });
 
     std::string input = R"({"method": "one_argument", "args": [2]})";
     std::string expected = R"({"ok":true,"result":4})";
@@ -231,13 +221,9 @@ void test_one_argument() {
     TEST_ASSERT_EQUAL_STRING(expected.c_str(), result.c_str());
 }
 
-int three_arguments(int a, int b, int c) {
-    return a + b + c;
-}
-
 void test_three_arguments() {
     JsonRpcDispatcher dispatcher;
-    dispatcher.addMethod("three_arguments", three_arguments);
+    dispatcher.addMethod("three_arguments", [](int a, int b, int c) { return a + b + c; });
 
     std::string input = R"({"method": "three_arguments", "args": [1, 2, 3]})";
     std::string expected = R"({"ok":true,"result":6})";

@@ -5,16 +5,13 @@ Usage example:
 #include <string>
 #include "json_rpc_dispatcher.hpp"
 
-// Example functions
-int add(int a, int b) { return a + b; }
-
 std::string concat(std::string a, std::string b) { return a + b; }
 
 int main() {
     JsonRpcDispatcher dispatcher;
 
     // Add methods
-    dispatcher.addMethod("add", add);
+    dispatcher.addMethod("add", [](int a, int b) { return a + b; });
     dispatcher.addMethod("concat", concat);
 
     // Example usage
@@ -91,7 +88,7 @@ auto apply(F&& f, Tuple&& t) -> decltype(apply_impl(std::forward<F>(f), std::for
 // RPC methods. This is a compile-time check for that.
 //
 
-// Define a type trait to check if a type of arguments / return are suported
+// Define a type trait to check if a type of arguments / return are supported
 template <typename T>
 struct is_supported_type : std::false_type {};
 
@@ -167,6 +164,17 @@ struct function_traits<Ret(*)(Args...)> {
 
 template<typename Ret, typename... Args>
 struct function_traits<std::function<Ret(Args...)>> {
+    using return_type = Ret;
+    using argument_types = std::tuple<Args...>;
+};
+
+// Specialization for lambdas and functors
+template<typename T>
+struct function_traits : function_traits<decltype(&T::operator())> {};
+
+// Specialization for member function pointers
+template<typename ClassType, typename Ret, typename... Args>
+struct function_traits<Ret(ClassType::*)(Args...) const> {
     using return_type = Ret;
     using argument_types = std::tuple<Args...>;
 };
