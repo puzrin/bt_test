@@ -5,7 +5,6 @@
 int8_t add_8bits(int8_t a, int8_t b) { return a + b; }
 std::string concat(std::string a, std::string b) { return a + b; }
 
-// Test 8bits data method
 TEST(JsonRpcDispatcherTest, Test8BitsData) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
@@ -17,7 +16,6 @@ TEST(JsonRpcDispatcherTest, Test8BitsData) {
     EXPECT_EQ(expected, result);
 }
 
-// Test string data method
 TEST(JsonRpcDispatcherTest, TestStringData) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
@@ -29,7 +27,6 @@ TEST(JsonRpcDispatcherTest, TestStringData) {
     EXPECT_EQ(expected, result);
 }
 
-// Test unknown method
 TEST(JsonRpcDispatcherTest, TestUnknownMethod) {
     JsonRpcDispatcher dispatcher;
 
@@ -40,7 +37,6 @@ TEST(JsonRpcDispatcherTest, TestUnknownMethod) {
     EXPECT_EQ(expected, result);
 }
 
-// Test bad input with no method
 TEST(JsonRpcDispatcherTest, TestNoMethodProp) {
     JsonRpcDispatcher dispatcher;
 
@@ -51,7 +47,6 @@ TEST(JsonRpcDispatcherTest, TestNoMethodProp) {
     EXPECT_EQ(expected, result);
 }
 
-// Test bad input with wrong method prop type
 TEST(JsonRpcDispatcherTest, TestMethodPropWrongType) {
     JsonRpcDispatcher dispatcher;
 
@@ -62,7 +57,6 @@ TEST(JsonRpcDispatcherTest, TestMethodPropWrongType) {
     EXPECT_EQ(expected, result);
 }
 
-// Test bad input with no args
 TEST(JsonRpcDispatcherTest, TestNoArgsProp) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
@@ -74,7 +68,6 @@ TEST(JsonRpcDispatcherTest, TestNoArgsProp) {
     EXPECT_EQ(expected, result);
 }
 
-// Test bad input with wrong args prop type
 TEST(JsonRpcDispatcherTest, TestArgsPropWrongType) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
@@ -86,7 +79,6 @@ TEST(JsonRpcDispatcherTest, TestArgsPropWrongType) {
     EXPECT_EQ(expected, result);
 }
 
-// Test args overflow
 TEST(JsonRpcDispatcherTest, TestArgsOverflow) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
@@ -100,8 +92,7 @@ TEST(JsonRpcDispatcherTest, TestArgsOverflow) {
     EXPECT_EQ(expected, result);
 }
 
-// Test wrong argument type for add_8bits: float
-TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeFloat) {
+TEST(JsonRpcDispatcherTest, TestWrongArgTypeFloat) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -113,8 +104,7 @@ TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeFloat) {
     EXPECT_EQ(expected, result);
 }
 
-// Test wrong argument type for add_8bits: string
-TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeString) {
+TEST(JsonRpcDispatcherTest, TestWrongArgTypeString) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -125,8 +115,7 @@ TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeString) {
     EXPECT_EQ(expected, result);
 }
 
-// Test wrong argument type for add_8bits: null
-TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeNull) {
+TEST(JsonRpcDispatcherTest, TestWrongArgTypeNull) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
 
@@ -137,8 +126,7 @@ TEST(JsonRpcDispatcherTest, TestAddWrongArgTypeNull) {
     EXPECT_EQ(expected, result);
 }
 
-// Test wrong argument type for concat: int
-TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeInt) {
+TEST(JsonRpcDispatcherTest, TestWrongArgTypeInt) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
 
@@ -149,8 +137,7 @@ TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeInt) {
     EXPECT_EQ(expected, result);
 }
 
-// Test wrong argument type for concat: null
-TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeNull) {
+TEST(JsonRpcDispatcherTest, TestStringWrongArgTypeNull) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("concat", concat);
 
@@ -161,7 +148,6 @@ TEST(JsonRpcDispatcherTest, TestConcatWrongArgTypeNull) {
     EXPECT_EQ(expected, result);
 }
 
-// Test no parameters
 TEST(JsonRpcDispatcherTest, TestNoArgs) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("noparams", [](){ return 5; });
@@ -173,8 +159,7 @@ TEST(JsonRpcDispatcherTest, TestNoArgs) {
     EXPECT_EQ(expected, result);
 }
 
-// Test method throws exception
-TEST(JsonRpcDispatcherTest, TestMethodThrowsException) {
+TEST(JsonRpcDispatcherTest, TestMethodThrows) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("throw_exception", []() -> int { throw std::runtime_error("Test exception"); });
 
@@ -207,7 +192,6 @@ TEST(JsonRpcDispatcherTest, TestThreeArguments) {
     EXPECT_EQ(expected, result);
 }
 
-// Test broken JSON input
 TEST(JsonRpcDispatcherTest, TestBrokenJsonInput) {
     JsonRpcDispatcher dispatcher;
     dispatcher.addMethod("add_8bits", add_8bits);
