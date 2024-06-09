@@ -1,26 +1,16 @@
 #include <iostream>
 #include <string>
 #include "json_rpc_dispatcher.hpp"
+#include "blinker.hpp"
 
-// Example functions
-std::string concat(std::string a, std::string b) { return a + b; }
+Blinker blinker;
 
-int main() {
-    JsonRpcDispatcher dispatcher;
+void setup() {
+    blinker.loop({ 300, 300, 1000, 1000 });
 
-    // Add methods
-    dispatcher.addMethod("add", [](int a, int b) { return a + b; });
-    dispatcher.addMethod("concat", concat);
-
-    // Example usage
-    std::string input = R"({"method": "add", "args": [1, 2]})";
-    std::cout << dispatcher.dispatch(input) << std::endl;
-
-    input = R"({"method": "concat", "args": ["hello ", "world"]})";
-    std::cout << dispatcher.dispatch(input) << std::endl;
-
-    input = R"({"method": "unknown", "args": []})";
-    std::cout << dispatcher.dispatch(input) << std::endl;
-
-    return 0;
+    Serial.begin(115200);
+    while (!Serial) delay(10);
+    Serial.println("===== Output test");
 }
+
+void loop() {}
