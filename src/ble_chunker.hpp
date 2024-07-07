@@ -20,7 +20,8 @@ using BleMessage = std::vector<uint8_t>;
 
 class BleChunker {
 public:
-    BleChunker(size_t maxBlobSize = 512)
+    // Max BLE MTU size usually 512 or 517 bytes. Set default transfer size a bit less.
+    BleChunker(size_t maxBlobSize = 500)
         : maxBlobSize(maxBlobSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
 
     void consumeChunk(const BleChunk& chunk) {
