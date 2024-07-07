@@ -20,7 +20,7 @@ using BleMessage = std::vector<uint8_t>;
 
 class BleChunker {
 public:
-    BleChunker(size_t maxBlobSize)
+    BleChunker(size_t maxBlobSize = 512)
         : maxBlobSize(maxBlobSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
 
     void consumeChunk(const BleChunk& chunk) {
