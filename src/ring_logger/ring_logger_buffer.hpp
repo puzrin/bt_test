@@ -19,7 +19,7 @@ public:
         size_t head, next_head;
 
         do {
-            head = this->head.load(std::memory_order_relaxed);
+            head = this->head.load(std::memory_order_acquire);
             next_head = (head + record_size) % BufferSize;
 
             // Ensure enough space is available
@@ -42,7 +42,7 @@ public:
         size_t tail, head, next_tail;
 
         while (true) {
-            tail = this->tail.load(std::memory_order_relaxed);
+            tail = this->tail.load(std::memory_order_acquire);
             head = this->head.load(std::memory_order_acquire);
 
             // No data records
@@ -58,7 +58,7 @@ public:
 
             // Make sure data was not corrupted, tail should not be changed.
             // Start from the beginning on fail.
-            if (this->tail.load(std::memory_order_relaxed) != tail) continue;
+            if (this->tail.load(std::memory_order_acquire) != tail) continue;
 
             next_tail = (tail + sizeof(RecordHeader) + size) % BufferSize;
 
@@ -67,7 +67,7 @@ public:
             readBuffer((tail + sizeof(RecordHeader)) % BufferSize, data, size);
 
             // Check tail was not changed from outside, update and finish on success
-            if (this->tail.compare_exchange_weak(tail, next_tail)) break;
+            if (this->tail.compare_exchange_weak(tail, next_tail, std::memory_order_release, std::memory_order_relaxed)) break;
         }
 
         return true;
@@ -94,7 +94,7 @@ private:
             new_tail = (tail + sizeof(RecordHeader) + header.size) % BufferSize;
 
             // Update tail pointer atomically
-            this->tail.compare_exchange_weak(tail, new_tail);
+            this->tail.compare_exchange_weak(tail, new_tail, std::memory_order_release, std::memory_order_relaxed);
         }
     }
 
