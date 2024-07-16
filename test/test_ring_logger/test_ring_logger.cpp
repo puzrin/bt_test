@@ -6,10 +6,20 @@ static constexpr char label[] = "foo";
 TEST(RingLoggerTest, ShowTemporaryOutput) {
     RingLogger<> logger;
 
-    logger.push_info("Hello, World!", 1, 2, 3, "foo bar");
-    logger.push<RingLoggerLevel::ERROR>("Hello, World!", 1, 2, 3);
+    logger.push_info("Hello, World! {}, {}, {}, {}", 1, 2, 3, "foo bar");
+    logger.push<RingLoggerLevel::ERROR>("Hello, World! {}. {}: {}", 1, 2, 3);
+    logger.lpush_info<label>("Hello! {} {}", 4, 5);
 
-    logger.lpush_info<label>("Hello!", 4, 5);
+    char buffer[1000];
+
+    logger.pull(buffer, sizeof(buffer));
+    std::cout << buffer << std::endl;
+
+    logger.pull(buffer, sizeof(buffer));
+    std::cout << buffer << std::endl;
+
+    logger.pull(buffer, sizeof(buffer));
+    std::cout << buffer << std::endl;
 }
 
 // Main function to run the tests

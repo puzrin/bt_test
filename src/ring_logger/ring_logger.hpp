@@ -75,8 +75,36 @@ public:
     }
 
     bool pull(char* outputBuffer, size_t bufferSize) {
-        // Implement pull functionality
-        return false; // Placeholder return value
+        uint8_t recordData[MaxRecordSize];
+        size_t recordSize = MaxRecordSize;
+
+        if (!ringBuffer.readRecord(recordData, recordSize)) {
+            return false; // No records available
+        }
+
+        typename ring_logger::Packer<MaxRecordSize, MaxArgs>::UnpackedData unpackedData;
+        typename ring_logger::Packer<MaxRecordSize, MaxArgs>::PackedData packedData = {{0}, 0};
+        std::memcpy(packedData.data, recordData, recordSize);
+        packedData.size = recordSize;
+
+        if (!packer.unpack(packedData, unpackedData)) {
+            return false; // Failed to unpack
+        }
+
+        uint32_t timestamp = unpackedData.data[0].uint32Value;
+        uint8_t level_as_byte = unpackedData.data[1].uint8Value;
+        RingLoggerLevel level = static_cast<RingLoggerLevel>(level_as_byte);
+        const char* label = unpackedData.data[2].stringValue;
+        const char* message = unpackedData.data[3].stringValue;
+
+        // Write log header
+        size_t offset = writeLogHeader(outputBuffer, bufferSize, timestamp, level, label);
+
+        // Format and write message with args
+        ring_logger::Formatter formatter;
+        formatter.print(outputBuffer + offset, bufferSize - offset, message, unpackedData.data + 4, unpackedData.size - 4);
+
+        return true;
     }
 
     // Forwarding to push with INFO level
@@ -94,4 +122,27 @@ public:
 private:
     ring_logger::Packer<MaxRecordSize, MaxArgs> packer;
     ring_logger::RingBuffer<BufferSize> ringBuffer;
+
+    size_t writeLogHeader(char* outputBuffer, size_t bufferSize, uint32_t /*timestamp*/, RingLoggerLevel level, const char* label) {
+        using namespace ring_logger;
+
+        const char* levelStr = nullptr;
+        switch (level) {
+            case RingLoggerLevel::DEBUG: levelStr = "DEBUG"; break;
+            case RingLoggerLevel::INFO: levelStr = "INFO"; break;
+            case RingLoggerLevel::ERROR: levelStr = "ERROR"; break;
+            case RingLoggerLevel::NONE: levelStr = "NONE"; break;
+            default: levelStr = "UNKNOWN"; break;
+        }
+
+        Formatter formatter;
+        bool success;
+        if (label[0] == '\0') {
+            success = formatter.print(outputBuffer, bufferSize, "[{}]: ", ArgVariant(levelStr));
+        } else {
+            success = formatter.print(outputBuffer, bufferSize, "[{}] [{}]: ", ArgVariant(levelStr), ArgVariant(label));
+        }
+
+        return success ? std::strlen(outputBuffer) : 0;
+    }
 };
