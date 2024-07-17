@@ -28,7 +28,7 @@ struct all_are_arg_variant<T, Rest...>
 
 class Formatter {
 public:
-    bool print(char* output, std::size_t max_length, const char* message, const ArgVariant* args, std::size_t num_args) const {
+    static bool print(char* output, std::size_t max_length, const char* message, const ArgVariant* args, std::size_t num_args) {
         if (!output || !message || max_length == 0) return false;
 
         std::size_t out_index = 0;
@@ -54,20 +54,20 @@ public:
 
     // Variadic template print function constrained to accept only ArgVariant types
     template<typename... Args>
-    typename std::enable_if<all_are_arg_variant<Args...>::value, bool>::type
-    print(char* output, std::size_t max_length, const char* message, Args&&... args) const {
+    static typename std::enable_if<all_are_arg_variant<Args...>::value, bool>::type
+    print(char* output, std::size_t max_length, const char* message, Args&&... args) {
         std::array<ArgVariant, sizeof...(args)> arg_array = { std::forward<Args>(args)... };
         return print(output, max_length, message, arg_array.data(), arg_array.size());
     }
 
 private:
-    FormatPlaceholder get_next_placeholder(const char* str) const {
+    static FormatPlaceholder get_next_placeholder(const char* str) {
         while (*str) 
             if (*str == '{' && *(str + 1) == '}') return {str, str + 2}; else ++str;
         return {nullptr, nullptr};
     }
 
-    bool write(char* output, std::size_t& out_index, std::size_t max_length, const ArgVariant& arg) const {
+    static bool write(char* output, std::size_t& out_index, std::size_t max_length, const ArgVariant& arg) {
         std::string arg_str;
         switch (arg.type) {
             case ArgTypeTag::INT8: arg_str = std::to_string(arg.int8Value); break;
@@ -84,14 +84,14 @@ private:
         return copy(arg_str.c_str(), output, out_index, arg_str.size(), max_length);
     }
 
-    bool copy(const char* src, char* dest, std::size_t& out_index, std::size_t size, std::size_t max_allowed) const {
+    static bool copy(const char* src, char* dest, std::size_t& out_index, std::size_t size, std::size_t max_allowed) {
         if (out_index + size > max_allowed) return false;
         std::memcpy(dest + out_index, src, size);
         out_index += size;
         return true;
     }
 
-    void write_trailing_zero(char* output, std::size_t max_length, std::size_t out_index) const {
+    static void write_trailing_zero(char* output, std::size_t max_length, std::size_t out_index) {
         if (out_index < max_length) output[out_index] = '\0';
         else output[max_length - 1] = '\0';
     }

@@ -101,8 +101,7 @@ public:
         size_t offset = writeLogHeader(outputBuffer, bufferSize, timestamp, level, label);
 
         // Format and write message with args
-        ring_logger::Formatter formatter;
-        formatter.print(outputBuffer + offset, bufferSize - offset, message, unpackedData.data + 4, unpackedData.size - 4);
+        ring_logger::Formatter::print(outputBuffer + offset, bufferSize - offset, message, unpackedData.data + 4, unpackedData.size - 4);
 
         return true;
     }
@@ -135,12 +134,11 @@ private:
             default: levelStr = "UNKNOWN"; break;
         }
 
-        Formatter formatter;
         bool success;
         if (label[0] == '\0') {
-            success = formatter.print(outputBuffer, bufferSize, "[{}]: ", ArgVariant(levelStr));
+            success = Formatter::print(outputBuffer, bufferSize, "[{}]: ", ArgVariant(levelStr));
         } else {
-            success = formatter.print(outputBuffer, bufferSize, "[{}] [{}]: ", ArgVariant(levelStr), ArgVariant(label));
+            success = Formatter::print(outputBuffer, bufferSize, "[{}] [{}]: ", ArgVariant(levelStr), ArgVariant(label));
         }
 
         return success ? std::strlen(outputBuffer) : 0;
