@@ -65,7 +65,6 @@ TEST(RingLoggerTest, WhitelistedLabels) {
     EXPECT_FALSE(logger.pull(buffer, sizeof(buffer)));
 }
 
-/*
 TEST(RingLoggerTest, TooBigMessage) {
     RingLogger<> logger;
     char buffer[1024] = {0};
@@ -74,7 +73,7 @@ TEST(RingLoggerTest, TooBigMessage) {
     ASSERT_TRUE(logger.pull(buffer, sizeof(buffer)));
     EXPECT_STREQ(buffer, "[INFO]: [TOO BIG]");
 }
-*/
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

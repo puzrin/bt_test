@@ -67,21 +67,19 @@ namespace ring_logger {
         return _is_label_in_list_impl(label, label_list);
     }
 
-    // Macro to define supported types
     #define SUPPORTED_TYPE(type) template <> struct is_supported_type<type> : std::true_type {}
 
-    // Helper to check if all argument types are supported
     template<typename T>
     struct is_supported_type : std::false_type {};
 
-    // Define supported types
     SUPPORTED_TYPE(int8_t);
     SUPPORTED_TYPE(uint8_t);
     SUPPORTED_TYPE(int16_t);
     SUPPORTED_TYPE(uint16_t);
     SUPPORTED_TYPE(int32_t);
     SUPPORTED_TYPE(uint32_t);
-    SUPPORTED_TYPE(char*); // Handles both char* and const char* due to type decay
+    SUPPORTED_TYPE(const char*);
+    SUPPORTED_TYPE(char*);
 
     template<typename... Args>
     struct are_supported_types;
