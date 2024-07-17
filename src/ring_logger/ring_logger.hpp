@@ -70,7 +70,7 @@ public:
 
     template<RingLoggerLevel level, const char* label, typename... Args>
     typename std::enable_if<!ring_logger::should_log<level, label, CompileTimeLogLevel, AllowedLabels, IgnoredLabels>::value>::type
-    lpush(const char* message, const Args&... msgArgs) {
+    lpush(const char* /*message*/, const Args&... /*msgArgs*/) {
         // Empty implementation for disabled conditions
     }
 
