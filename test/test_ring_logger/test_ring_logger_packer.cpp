@@ -99,3 +99,26 @@ TEST(PackerTest, UnpackUnknownType) {
 
     ASSERT_FALSE(result);
 }
+
+TEST(PackerTest, PackMaxArguments) {
+    auto packedData = TestPacker::pack(1, 2, 3, 4, 5, 6, 7, 8, 9, 10); // 10 arguments
+
+    TestPacker::UnpackedData unpackedData;
+    bool result = TestPacker::unpack(packedData, unpackedData);
+
+    ASSERT_TRUE(result);
+    ASSERT_EQ(unpackedData.size, 10u);
+}
+
+TEST(PackerTest, UnpackTooManyArguments) {
+    TestPacker::PackedData packedData = {};
+    packedData.data[0] = ARGUMENTS_COUNT + 1;  // Exceeds max arguments
+    packedData.data[1] = static_cast<uint8_t>(ArgTypeTag::INT8);
+    packedData.data[2] = 42;
+    packedData.size = 3;
+
+    TestPacker::UnpackedData unpackedData;
+    bool result = TestPacker::unpack(packedData, unpackedData);
+
+    ASSERT_FALSE(result);
+}

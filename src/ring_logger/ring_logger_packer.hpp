@@ -22,6 +22,8 @@ public:
 
     template<typename... Args>
     static PackedData pack(const Args&... args) {
+        static_assert(sizeof...(args) <= MAX_ARGUMENTS, "Number of arguments exceeds the maximum allowed");
+
         PackedData packedData = {};
         size_t offset = 0;
 
@@ -41,6 +43,9 @@ public:
 
         // Read the number of arguments
         unpackedData.size = packedData.data[offset++];
+        if (unpackedData.size > MAX_ARGUMENTS) {
+            return false; // More arguments than allowed
+        }
 
         for (size_t i = 0; i < unpackedData.size; ++i) {
             ArgTypeTag type = static_cast<ArgTypeTag>(packedData.data[offset++]);
