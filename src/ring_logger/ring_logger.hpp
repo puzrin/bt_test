@@ -118,6 +118,30 @@ public:
         lpush<RingLoggerLevel::INFO, label>(message, msgArgs...);
     }
 
+    // Forwarding to push with DEBUG level
+    template<typename... Args>
+    void push_debug(const char* message, const Args&... msgArgs) {
+        push<RingLoggerLevel::DEBUG>(message, msgArgs...);
+    }
+
+    // Forwarding to lpush with DEBUG level
+    template<const char* label, typename... Args>
+    void lpush_debug(const char* message, const Args&... msgArgs) {
+        lpush<RingLoggerLevel::DEBUG, label>(message, msgArgs...);
+    }
+
+    // Forwarding to push with ERROR level
+    template<typename... Args>
+    void push_error(const char* message, const Args&... msgArgs) {
+        push<RingLoggerLevel::ERROR>(message, msgArgs...);
+    }
+
+    // Forwarding to lpush with ERROR level
+    template<const char* label, typename... Args>
+    void lpush_error(const char* message, const Args&... msgArgs) {
+        lpush<RingLoggerLevel::ERROR, label>(message, msgArgs...);
+    }
+
 private:
     ring_logger::Packer<MaxRecordSize, MaxArgs> packer;
     ring_logger::RingBuffer<BufferSize> ringBuffer;
