@@ -125,8 +125,10 @@ private:
 
     static void serialize(uint8_t* buffer, size_t& offset, const char* value) {
         buffer[offset++] = static_cast<uint8_t>(ArgTypeTag::STRING);
-        size_t length = std::strlen(value);
-        buffer[offset++] = static_cast<uint8_t>(length);
+        size_t length = std::strlen(value) + 1; // Include trailing zero
+        uint16_t length16 = static_cast<uint16_t>(length);
+        std::memcpy(buffer + offset, &length16, sizeof(length16));
+        offset += sizeof(length16);
         std::memcpy(buffer + offset, value, length);
         offset += length;
     }
@@ -140,7 +142,9 @@ private:
     }
 
     static const char* deserializeString(const uint8_t* buffer, size_t& offset) {
-        size_t length = buffer[offset++];
+        uint16_t length;
+        std::memcpy(&length, buffer + offset, sizeof(length));
+        offset += sizeof(length);
         const char* str = reinterpret_cast<const char*>(buffer + offset);
         offset += length;
         return str;
@@ -152,7 +156,7 @@ private:
     }
 
     static void calculateArgumentSize(size_t& size, const char* value) {
-        size += sizeof(ArgTypeTag) + sizeof(uint8_t) + std::strlen(value);
+        size += sizeof(ArgTypeTag) + sizeof(uint16_t) + std::strlen(value) + 1; // Include trailing zero
     }
 };
 

@@ -43,47 +43,49 @@ TEST(PackerTest, PackUnpackIntegers) {
 }
 
 TEST(PackerTest, PackUnpackString) {
-    const char* str_val = "Hello, World!";
-    auto packedData = TestPacker::pack(str_val);
+    const char* foo_str = "foo";
+    TestPacker::PackedData packedData = {};
+    std::memset(packedData.data, '=', BUFFER_SIZE);
+    
+    // Using both pointer and literal for strings
+    packedData = TestPacker::pack("", foo_str);
 
     TestPacker::UnpackedData unpackedData;
     bool result = TestPacker::unpack(packedData, unpackedData);
 
     ASSERT_TRUE(result);
-    ASSERT_EQ(unpackedData.size, 1u);
+    ASSERT_EQ(unpackedData.size, 2u);
 
     EXPECT_EQ(unpackedData.data[0].type, ArgTypeTag::STRING);
-    EXPECT_STREQ(unpackedData.data[0].stringValue, str_val);
-}
+    EXPECT_EQ(std::strlen(unpackedData.data[0].stringValue), std::strlen(""));
+    EXPECT_STREQ(unpackedData.data[0].stringValue, "");
 
-TEST(PackerTest, PackUnpackStringLiteral) {
-    auto packedData = TestPacker::pack("Hello, World!");
+    EXPECT_EQ(unpackedData.data[1].type, ArgTypeTag::STRING);
+    EXPECT_EQ(std::strlen(unpackedData.data[1].stringValue), std::strlen(foo_str));
+    EXPECT_STREQ(unpackedData.data[1].stringValue, foo_str);
 
-    TestPacker::UnpackedData unpackedData;
-    bool result = TestPacker::unpack(packedData, unpackedData);
+    // Using both pointer and literal for strings
+    packedData = TestPacker::pack(foo_str, "barrr");
+
+    result = TestPacker::unpack(packedData, unpackedData);
 
     ASSERT_TRUE(result);
-    ASSERT_EQ(unpackedData.size, 1u);
+    ASSERT_EQ(unpackedData.size, 2u);
 
     EXPECT_EQ(unpackedData.data[0].type, ArgTypeTag::STRING);
-    EXPECT_STREQ(unpackedData.data[0].stringValue, "Hello, World!");
+    EXPECT_EQ(std::strlen(unpackedData.data[0].stringValue), std::strlen(foo_str));
+    EXPECT_STREQ(unpackedData.data[0].stringValue, foo_str);
+
+    EXPECT_EQ(unpackedData.data[1].type, ArgTypeTag::STRING);
+    EXPECT_EQ(std::strlen(unpackedData.data[1].stringValue), std::strlen("barrr"));
+    EXPECT_STREQ(unpackedData.data[1].stringValue, "barrr");
 }
 
 TEST(PackerTest, GetPackedSize) {
     int8_t int8_val = 42;
-    const char* str_val = "Hello, World!";
-    size_t packedSize = TestPacker::getPackedSize(int8_val, str_val);
-
-    // Check if the calculated packed size is correct
-    ASSERT_EQ(packedSize, 1 + (1 + sizeof(int8_val)) + (1 + 1 + std::strlen(str_val)));
-}
-
-TEST(PackerTest, GetPackedSizeWithLiteral) {
-    int8_t int8_val = 42;
     size_t packedSize = TestPacker::getPackedSize(int8_val, "Hello, World!");
 
-    // Check if the calculated packed size is correct
-    ASSERT_EQ(packedSize, 1 + (1 + sizeof(int8_val)) + (1 + 1 + std::strlen("Hello, World!")));
+    ASSERT_EQ(packedSize, 1 + (1 + sizeof(int8_val)) + (1 + sizeof(uint16_t) + std::strlen("Hello, World!") + 1));
 }
 
 TEST(PackerTest, UnpackUnknownType) {
