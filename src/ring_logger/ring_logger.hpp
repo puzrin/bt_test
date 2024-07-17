@@ -103,7 +103,7 @@ public:
         // Format and write message with args
         ring_logger::Formatter::print(outputBuffer + offset, bufferSize - offset, message, unpackedData.data + 4, unpackedData.size - 4);
 
-        return true;
+        return std::strlen(outputBuffer);
     }
 
     // Forwarding to push with INFO level
@@ -134,13 +134,12 @@ private:
             default: levelStr = "UNKNOWN"; break;
         }
 
-        bool success;
         if (label[0] == '\0') {
-            success = Formatter::print(outputBuffer, bufferSize, "[{}]: ", ArgVariant(levelStr));
+            Formatter::print(outputBuffer, bufferSize, "[{}]: ", ArgVariant(levelStr));
         } else {
-            success = Formatter::print(outputBuffer, bufferSize, "[{}] [{}]: ", ArgVariant(levelStr), ArgVariant(label));
+            Formatter::print(outputBuffer, bufferSize, "[{}] [{}]: ", ArgVariant(levelStr), ArgVariant(label));
         }
 
-        return success ? std::strlen(outputBuffer) : 0;
+        return std::strlen(outputBuffer);
     }
 };
