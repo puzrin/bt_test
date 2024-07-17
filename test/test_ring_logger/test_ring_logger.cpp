@@ -68,10 +68,37 @@ TEST(RingLoggerTest, WhitelistedLabels) {
 TEST(RingLoggerTest, TooBigMessage) {
     RingLogger<> logger;
     char buffer[1024] = {0};
-    std::string bigMessage(600, 'A');
+    std::string bigMessage(600, 'A'); // Create a big message
     logger.push_info("{}", bigMessage.c_str());
     ASSERT_TRUE(logger.pull(buffer, sizeof(buffer)));
     EXPECT_STREQ(buffer, "[INFO]: [TOO BIG]");
+}
+
+TEST(RingLoggerTest, SupportedArgTypes) {
+    RingLogger<> logger;
+    char buffer[1024] = {0};
+
+    int8_t int8_val = -8;
+    uint8_t uint8_val = 8;
+    int16_t int16_val = -16;
+    uint16_t uint16_val = 16;
+    int32_t int32_val = -32;
+    uint32_t uint32_val = 32;
+    const char* str_val = "test";
+    char* mutable_str_val = const_cast<char*>("mutable");
+
+    logger.push_info("Test values: {}, {}, {}, {}, {}, {}, {}, {}", int8_val, uint8_val, int16_val, uint16_val, int32_val, uint32_val, str_val, mutable_str_val);
+    ASSERT_TRUE(logger.pull(buffer, sizeof(buffer)));
+    EXPECT_STREQ(buffer, "[INFO]: Test values: -8, 8, -16, 16, -32, 32, test, mutable");
+}
+
+TEST(RingLoggerTest, MaxArgs) {
+    RingLogger<> logger;
+    char buffer[1024] = {0};
+
+    logger.push_info("Test max args: {}, {}, {}, {}, {}, {}, {}, {}, {}, {}", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    ASSERT_TRUE(logger.pull(buffer, sizeof(buffer)));
+    EXPECT_STREQ(buffer, "[INFO]: Test max args: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10");
 }
 
 int main(int argc, char **argv) {

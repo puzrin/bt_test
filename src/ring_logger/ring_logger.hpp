@@ -39,7 +39,7 @@ template<
 >
 class RingLogger {
 public:
-    RingLogger() : packer(), ringBuffer() {}
+    RingLogger() {}
 
     template<RingLoggerLevel level, typename... Args>
     void push(const char* message, const Args&... msgArgs) {
@@ -53,6 +53,7 @@ public:
         static_assert(level != RingLoggerLevel::NONE, "NONE log level is invalid for logging");
         static_assert(label[0] != ' ', "Label should not start with a space");
         static_assert(label[0] == '\0' || label[std::strlen(label) - 1] != ' ', "Label should not end with a space");
+        static_assert(sizeof...(msgArgs) <= MaxArgs, "Too many arguments for logging");
 
         uint32_t timestamp = 0;
         uint8_t level_as_byte = static_cast<uint8_t>(level);
@@ -82,8 +83,8 @@ public:
             return false; // No records available
         }
 
-        typename ring_logger::Packer<MaxRecordSize, MaxArgs>::UnpackedData unpackedData;
-        typename ring_logger::Packer<MaxRecordSize, MaxArgs>::PackedData packedData = {{0}, 0};
+        typename ring_logger::Packer<MaxRecordSize, MaxArgs + 4>::UnpackedData unpackedData;
+        typename ring_logger::Packer<MaxRecordSize, MaxArgs + 4>::PackedData packedData = {{0}, 0};
         std::memcpy(packedData.data, recordData, recordSize);
         packedData.size = recordSize;
 
@@ -97,53 +98,45 @@ public:
         const char* label = unpackedData.data[2].stringValue;
         const char* message = unpackedData.data[3].stringValue;
 
-        // Write log header
         size_t offset = writeLogHeader(outputBuffer, bufferSize, timestamp, level, label);
 
-        // Format and write message with args
         ring_logger::Formatter::print(outputBuffer + offset, bufferSize - offset, message, unpackedData.data + 4, unpackedData.size - 4);
 
         return std::strlen(outputBuffer);
     }
 
-    // Forwarding to push with INFO level
     template<typename... Args>
     void push_info(const char* message, const Args&... msgArgs) {
         push<RingLoggerLevel::INFO>(message, msgArgs...);
     }
 
-    // Forwarding to lpush with INFO level
     template<const char* label, typename... Args>
     void lpush_info(const char* message, const Args&... msgArgs) {
         lpush<RingLoggerLevel::INFO, label>(message, msgArgs...);
     }
 
-    // Forwarding to push with DEBUG level
     template<typename... Args>
     void push_debug(const char* message, const Args&... msgArgs) {
         push<RingLoggerLevel::DEBUG>(message, msgArgs...);
     }
 
-    // Forwarding to lpush with DEBUG level
     template<const char* label, typename... Args>
     void lpush_debug(const char* message, const Args&... msgArgs) {
         lpush<RingLoggerLevel::DEBUG, label>(message, msgArgs...);
     }
 
-    // Forwarding to push with ERROR level
     template<typename... Args>
     void push_error(const char* message, const Args&... msgArgs) {
         push<RingLoggerLevel::ERROR>(message, msgArgs...);
     }
 
-    // Forwarding to lpush with ERROR level
     template<const char* label, typename... Args>
     void lpush_error(const char* message, const Args&... msgArgs) {
         lpush<RingLoggerLevel::ERROR, label>(message, msgArgs...);
     }
 
 private:
-    ring_logger::Packer<MaxRecordSize, MaxArgs> packer;
+    ring_logger::Packer<MaxRecordSize, MaxArgs + 4> packer;
     ring_logger::RingBuffer<BufferSize> ringBuffer;
 
     size_t writeLogHeader(char* outputBuffer, size_t bufferSize, uint32_t /*timestamp*/, RingLoggerLevel level, const char* label) {
