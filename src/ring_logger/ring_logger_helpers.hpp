@@ -67,19 +67,30 @@ namespace ring_logger {
         return _is_label_in_list_impl(label, label_list);
     }
 
-    #define SUPPORTED_TYPE(type) template <> struct is_supported_type<type> : std::true_type {}
-
     template<typename T>
-    struct is_supported_type : std::false_type {};
+    struct is_diverged_int : std::integral_constant<bool, std::is_same<T, int>::value && !std::is_same<int, int32_t>::value && sizeof(int) == sizeof(int32_t)> {};
 
-    SUPPORTED_TYPE(int8_t);
-    SUPPORTED_TYPE(uint8_t);
-    SUPPORTED_TYPE(int16_t);
-    SUPPORTED_TYPE(uint16_t);
-    SUPPORTED_TYPE(int32_t);
-    SUPPORTED_TYPE(uint32_t);
-    SUPPORTED_TYPE(const char*);
-    SUPPORTED_TYPE(char*);
+    // On some platform like RISC-V "int" may be != any of strict intXX_t types.
+    // We allow such diverged int-s as "supported type".
+    // If `int` not diverged (same as one of intXX_t), it's not added to avoid double definition.
+    // Also this is false by default for other non-specialized types.
+    template<typename T>
+    struct is_supported_type
+        : std::conditional<
+            is_diverged_int<T>::value,
+            std::true_type,
+            std::false_type
+        >::type {};
+
+    // Explicit specializations for supported types
+    template<> struct is_supported_type<int8_t> : std::true_type {};
+    template<> struct is_supported_type<uint8_t> : std::true_type {};
+    template<> struct is_supported_type<int16_t> : std::true_type {};
+    template<> struct is_supported_type<uint16_t> : std::true_type {};
+    template<> struct is_supported_type<int32_t> : std::true_type {};
+    template<> struct is_supported_type<uint32_t> : std::true_type {};
+    template<> struct is_supported_type<const char*> : std::true_type {};
+    template<> struct is_supported_type<char*> : std::true_type {};
 
     template<typename... Args>
     struct are_supported_types;

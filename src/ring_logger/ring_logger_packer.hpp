@@ -92,11 +92,6 @@ private:
         serialize(buffer, offset, value);
     }
 
-    // Overload for const char* (string)
-    static void serializeArgument(uint8_t* buffer, size_t& offset, const char* value) {
-        serialize(buffer, offset, value);
-    }
-
     template<typename T>
     static void serialize(uint8_t* buffer, size_t& offset, const T& value, ArgTypeTag type) {
         buffer[offset++] = static_cast<uint8_t>(type);
@@ -136,6 +131,13 @@ private:
         offset += sizeof(length16);
         std::memcpy(buffer + offset, value, length);
         offset += length;
+    }
+
+    // SFINAE serialize for diverged int
+    template<typename T>
+    static typename std::enable_if<is_diverged_int<T>::value>::type
+    serialize(uint8_t* buffer, size_t& offset, T value) {
+        serialize(buffer, offset, static_cast<int32_t>(value));
     }
 
     template<typename T>
