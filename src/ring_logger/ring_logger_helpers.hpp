@@ -102,6 +102,6 @@ namespace ring_logger {
     struct are_supported_types<T, Rest...>
         : std::integral_constant<bool, is_supported_type<typename std::decay<T>::type>::value && are_supported_types<Rest...>::value> {};
 
-    constexpr char EMPTY_STRING[] = "";
+    inline constexpr char EMPTY_STRING[] = "";
 
 } // namespace ring_logger
