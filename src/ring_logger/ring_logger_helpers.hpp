@@ -64,7 +64,7 @@ namespace ring_logger {
     }
 
     constexpr bool is_label_in_list(const char* label, const char* label_list) {
-        return _is_label_in_list_impl(label, label_list);
+        return label_list == nullptr ? false : _is_label_in_list_impl(label, label_list);
     }
 
     template<typename T>
@@ -101,7 +101,5 @@ namespace ring_logger {
     template<typename T, typename... Rest>
     struct are_supported_types<T, Rest...>
         : std::integral_constant<bool, is_supported_type<typename std::decay<T>::type>::value && are_supported_types<Rest...>::value> {};
-
-    inline constexpr char EMPTY_STRING[] = "";
 
 } // namespace ring_logger

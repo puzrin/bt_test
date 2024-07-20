@@ -38,7 +38,7 @@ TEST(RingLoggerTest, BasicPushAndLpush) {
 }
 
 TEST(RingLoggerTest, IgnoreLabel) {
-    RingLogger<10 * 1024, RingLoggerLevel::DEBUG, 512, 10, ring_logger::EMPTY_STRING, ignored_labels_list> logger;
+    RingLogger<10 * 1024, RingLoggerLevel::DEBUG, 512, 10, nullptr, ignored_labels_list> logger;
     char buffer[1024] = {0};
 
     logger.lpush_info<garbage_label>("This should be ignored");
@@ -50,7 +50,7 @@ TEST(RingLoggerTest, IgnoreLabel) {
 }
 
 TEST(RingLoggerTest, WhitelistedLabels) {
-    RingLogger<10 * 1024, RingLoggerLevel::DEBUG, 512, 10, whitelisted_labels_list, ring_logger::EMPTY_STRING> logger;
+    RingLogger<10 * 1024, RingLoggerLevel::DEBUG, 512, 10, whitelisted_labels_list, nullptr> logger;
     char buffer[1024] = {0};
 
     logger.lpush_info<foo_label>("Hello, {}!", "World");

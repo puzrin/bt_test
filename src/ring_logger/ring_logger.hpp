@@ -23,19 +23,24 @@ namespace ring_logger {
     template<RingLoggerLevel level, const char* label, RingLoggerLevel CompileTimeLogLevel, const char* allowedLabels, const char* ignoredLabels>
     struct should_log {
         static const bool value = level >= CompileTimeLogLevel &&
-                                  (std::strcmp(allowedLabels, "") == 0 || std::strcmp(allowedLabels, "*") == 0 || is_label_in_list(label, allowedLabels)) &&
-                                  !is_label_in_list(label, ignoredLabels);
+                                  (allowedLabels == nullptr || is_label_in_list(label, allowedLabels)) &&
+                                  (ignoredLabels == nullptr || !is_label_in_list(label, ignoredLabels));
     };
 
 } // namespace ring_logger
+
+// WARNING: if you decide use allowedLabels/ignoredLabels features, those MUST
+// be declared INLINE constexpr to use log in multiple files, otherwise you will
+// get linker errors. This requires c++17 or later. For older version - keep
+// allowedLabels/ignoredLabels as nullptr and use only CompileTimeLogLevel.
 
 template<
     size_t BufferSize = 10 * 1024,
     RingLoggerLevel CompileTimeLogLevel = RingLoggerLevel::DEBUG,
     size_t MaxRecordSize = 512,
     size_t MaxArgs = 10,
-    const char* AllowedLabels = ring_logger::EMPTY_STRING,
-    const char* IgnoredLabels = ring_logger::EMPTY_STRING
+    const char* AllowedLabels = nullptr,
+    const char* IgnoredLabels = nullptr
 >
 class RingLogger {
 public:
@@ -43,7 +48,7 @@ public:
 
     template<RingLoggerLevel level, typename... Args>
     void push(const char* message, const Args&... msgArgs) {
-        lpush<level, ring_logger::EMPTY_STRING>(message, msgArgs...);
+        lpush<level, nullptr>(message, msgArgs...);
     }
 
     template<RingLoggerLevel level, const char* label, typename... Args>
@@ -51,21 +56,22 @@ public:
     lpush(const char* message, const Args&... msgArgs) {
         static_assert(ring_logger::are_supported_types<typename std::decay<Args>::type...>::value, "Unsupported argument type");
         static_assert(level != RingLoggerLevel::NONE, "NONE log level is invalid for logging");
-        static_assert(label[0] != ' ', "Label should not start with a space");
-        static_assert(label[0] == '\0' || label[std::strlen(label) - 1] != ' ', "Label should not end with a space");
+        static_assert(label == nullptr || label[0] != ' ', "Label should not start with a space");
+        static_assert(label == nullptr || label[0] == '\0' || label[std::strlen(label ? label : "") - 1] != ' ', "Label should not end with a space");
         static_assert(sizeof...(msgArgs) <= MaxArgs, "Too many arguments for logging");
 
         uint32_t timestamp = 0;
         uint8_t level_as_byte = static_cast<uint8_t>(level);
-        size_t packedSize = packer.getPackedSize(timestamp, level_as_byte, label, message, msgArgs...);
+        const char* safe_label = (label == nullptr) ? "" : label;
+        size_t packedSize = packer.getPackedSize(timestamp, level_as_byte, safe_label, message, msgArgs...);
 
         if (packedSize > MaxRecordSize) {
-            auto packedData = packer.pack(timestamp, level_as_byte, label, "[TOO BIG]");
+            auto packedData = packer.pack(timestamp, level_as_byte, safe_label, "[TOO BIG]");
             ringBuffer.writeRecord(packedData.data, packedData.size);
             return;
         }
 
-        auto packedData = packer.pack(timestamp, level_as_byte, label, message, msgArgs...);
+        auto packedData = packer.pack(timestamp, level_as_byte, safe_label, message, msgArgs...);
         ringBuffer.writeRecord(packedData.data, packedData.size);
     }
 
