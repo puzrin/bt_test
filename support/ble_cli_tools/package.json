@@ -1,0 +1,14 @@
+{
+    "private": true,
+    "scripts": {
+      "test": "node --test --import=tsx test/**/*.ts"
+    },
+    "dependencies": {
+      "@abandonware/noble": "^1.9.2-15",
+      "tsx": "^3.9.0"
+    },
+    "engines": {
+      "node": ">=22"
+    }
+  }
+  
