@@ -15,10 +15,7 @@ async function main() {
     const connector = new BleConnector();
     await connector.connect();
 
-    const chunker = new BleClientChunker(
-        () => connector.read(),
-        (data) => connector.write(data)
-    );
+    const chunker = new BleClientChunker(connector);
     const rpcClient = new BleRpcClient(chunker);
 
     try {
