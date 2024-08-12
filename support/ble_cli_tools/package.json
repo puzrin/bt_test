@@ -1,14 +1,15 @@
 {
-    "private": true,
-    "scripts": {
-      "test": "node --test --import=tsx test/**/*.ts"
-    },
-    "dependencies": {
-      "@abandonware/noble": "^1.9.2-15",
-      "tsx": "^3.9.0"
-    },
-    "engines": {
-      "node": ">=22"
-    }
+  "private": true,
+  "scripts": {
+    "test": "node --test --import=tsimp/import test/**/*.ts"
+  },
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-15",
+    "@types/node": "^22.2.0",
+    "tsimp": "^2.0.11",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=22"
   }
-  
+}

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --import=tsx
+#!/usr/bin/env -S node --import=tsimp/import
 
 import { BleRpcClient } from './src/BleRpcClient';
 import { BleClientChunker } from './src/BleClientChunker';
