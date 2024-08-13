@@ -1,3 +1,7 @@
+export interface BinaryTransport {
+    send(data: BleMessage): Promise<BleMessage>;
+}
+
 export class BleChunkHead {
     messageId: number;
     sequenceNumber: number;
@@ -41,7 +45,7 @@ export function mergeUint8Arrays(arrays: Uint8Array[]): Uint8Array {
     return result;
 }
 
-export class BleClientChunker {
+export class BleClientChunker implements BinaryTransport {
     private io: IO;
     private maxBlobSize: number;
     private messageIdCounter: number;
