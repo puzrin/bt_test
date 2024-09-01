@@ -3,15 +3,17 @@
 
 Logger logger;
 
+char outputBuffer[1024];
+
 static void LogOutputTask(void* pvParameters) {
     Serial.begin(115200);
 
     while (!Serial) vTaskDelay(pdMS_TO_TICKS(10));
 
-    DEBUG("===== starting logger thread");
-
     while (true) {
-        // TODO: Read log messages and print them to the serial port
+        while (logger.pull(outputBuffer, sizeof(outputBuffer))) {
+            Serial.println(outputBuffer);
+        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

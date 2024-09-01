@@ -10,14 +10,8 @@ BleManager bleManager("Reflow Table");
 
 void setup() {
     logger_init();
-    DEBUG("===== Output test", 1, 2, "three");
-    //DEBUG("===== Output test", uint8_t(1), uint8_t(2));
 
     blinker.loop({ 300, 300, 1000, 1000 });
-
-    //Serial.begin(115200);
-    //while (!Serial) delay(10);
-    //Serial.println("===== Output test");
 
     // Demo methods
     bleManager.rpc.addMethod("ping", []()-> std::string { return "pong"; });
