@@ -41,13 +41,12 @@ protected:
     }
 
     BleChunk createChunk(uint8_t messageId, uint16_t sequenceNumber, uint8_t flags, const std::vector<uint8_t>& data) {
-        BleChunkHead head;
-        head.messageId = messageId;
-        head.sequenceNumber = sequenceNumber;
-        head.flags = flags;
+        BleChunkHead head(messageId, sequenceNumber, flags);
 
-        BleChunk chunk = data;
-        chunk.insert(chunk.begin(), reinterpret_cast<uint8_t*>(&head), reinterpret_cast<uint8_t*>(&head) + sizeof(head));
+        BleChunk chunk;
+        chunk.resize(BleChunkHead::SIZE);
+        head.fillTo(chunk);
+        chunk.insert(chunk.end(), data.begin(), data.end());
         return chunk;
     }
 };
@@ -74,11 +73,9 @@ TEST_F(BleChunkerTest, MessageSizeOverflow) {
     EXPECT_FALSE(onMessageCalled);
     EXPECT_TRUE(onRespondCalled);
     EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
-    if (!lastResponseChunks.empty()) {
-        BleChunkHead errorHead;
-        std::copy(lastResponseChunks[0].begin(), lastResponseChunks[0].begin() + sizeof(errorHead), reinterpret_cast<uint8_t*>(&errorHead));
-        EXPECT_EQ(BleChunkHead::SIZE_OVERFLOW_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
-    }
+
+    BleChunkHead errorHead(lastResponseChunks[0]);
+    EXPECT_EQ(BleChunkHead::SIZE_OVERFLOW_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
 }
 
 TEST_F(BleChunkerTest, MissedChunks) {
@@ -91,11 +88,9 @@ TEST_F(BleChunkerTest, MissedChunks) {
     EXPECT_FALSE(onMessageCalled);
     EXPECT_TRUE(onRespondCalled);
     EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
-    if (!lastResponseChunks.empty()) {
-        BleChunkHead errorHead;
-        std::copy(lastResponseChunks[0].begin(), lastResponseChunks[0].begin() + sizeof(errorHead), reinterpret_cast<uint8_t*>(&errorHead));
-        EXPECT_EQ(BleChunkHead::MISSED_CHUNKS_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
-    }
+
+    BleChunkHead errorHead(lastResponseChunks[0]);
+    EXPECT_EQ(BleChunkHead::MISSED_CHUNKS_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
 }
 
 TEST_F(BleChunkerTest, MultipleMessages) {
@@ -127,6 +122,36 @@ TEST_F(BleChunkerTest, MultipleMessages) {
     EXPECT_EQ(std::vector<uint8_t>({'2', 'N', 'D', 'M', 'S', 'G'}), lastReceivedMessage);
     EXPECT_TRUE(onRespondCalled);
     EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+}
+
+TEST_F(BleChunkerTest, TooShortChunk) {
+    BleChunk chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'}); // Valid chunk
+    BleChunk shortChunk = {0x01, 0x00}; // Too short chunk
+    BleChunk chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'}); // Valid chunk
+
+    chunker->consumeChunk(chunk1);    // First valid chunk
+    chunker->consumeChunk(shortChunk); // Short, invalid chunk (should be ignored)
+    chunker->consumeChunk(chunk2);    // Second valid chunk
+
+    EXPECT_TRUE(onMessageCalled);
+    EXPECT_EQ(static_cast<size_t>(6), lastReceivedMessage.size());
+    EXPECT_EQ(std::vector<uint8_t>({'A', 'B', 'C', 'D', 'E', 'F'}), lastReceivedMessage);
+    EXPECT_TRUE(onRespondCalled);
+    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+}
+
+TEST_F(BleChunkerTest, ZeroLengthMessageResponse) {
+    chunker->onMessage = [](const BleMessage&) { return BleMessage(); };
+
+    BleChunk chunk1 = createChunk(1, 0, BleChunkHead::FINAL_CHUNK_FLAG, {'A', 'B', 'C'});
+    chunker->consumeChunk(chunk1);
+
+    EXPECT_TRUE(onRespondCalled);
+    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+
+    BleChunkHead responseHead(lastResponseChunks[0]);
+    EXPECT_EQ(BleChunkHead::FINAL_CHUNK_FLAG, responseHead.flags);
+    EXPECT_EQ(BleChunkHead::SIZE, lastResponseChunks[0].size()); // Only the header, no data
 }
 
 int main(int argc, char **argv) {

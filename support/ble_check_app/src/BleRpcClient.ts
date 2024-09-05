@@ -18,9 +18,11 @@ export class BleRpcClient {
         };
 
         const requestBin = new TextEncoder().encode(JSON.stringify(request));
+        console.log(`Sending RPC request: ${JSON.stringify(request)}`);
 
         // Send the request and receive the response
         const responseBin = await this.transport.send(requestBin);
+        console.log(`Received response: ${new TextDecoder().decode(responseBin)}`);
 
         // Deserialize the response
         const responseObj = JSON.parse(new TextDecoder().decode(responseBin));

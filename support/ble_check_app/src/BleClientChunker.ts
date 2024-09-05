@@ -18,16 +18,20 @@ export class BleChunkHead {
     }
 
     static fromBuffer(buffer: Uint8Array): BleChunkHead {
-        return new BleChunkHead(buffer[0], (buffer[1] << 8) | buffer[2], buffer[3]);
+        return new BleChunkHead(buffer[0], buffer[1] | (buffer[2] << 8), buffer[3]);
     }
 
     toBuffer(): Uint8Array {
         const buffer = new Uint8Array(4);
         buffer[0] = this.messageId;
-        buffer[1] = (this.sequenceNumber >> 8) & 0xff;
-        buffer[2] = this.sequenceNumber & 0xff;
+        buffer[1] = this.sequenceNumber & 0xff;
+        buffer[2] = (this.sequenceNumber >> 8) & 0xff;
         buffer[3] = this.flags;
         return buffer;
+    }
+
+    static isNodata(chunk: BleChunk): boolean {
+        return chunk.length < 4;
     }
 }
 
@@ -73,6 +77,7 @@ export class BleClientChunker implements BinaryTransport {
             chunks.push(mergeUint8Arrays([head.toBuffer(), chunk]));
         }
 
+        console.log(`Message split into ${chunks.length} chunks`); // Log the number of chunks
         return chunks;
     }
 
@@ -82,42 +87,62 @@ export class BleClientChunker implements BinaryTransport {
 
             // Send all chunks
             for (const chunk of chunks) {
+                console.log(`Sending chunk of size ${chunk.length}`);
                 await this.io.write(chunk);
             }
 
             // Read the first chunk of the response
             let responseChunk = await this.io.read();
-            const head = BleChunkHead.fromBuffer(responseChunk);
-
-            // Check for errors
-            if (head.flags & BleChunkHead.SIZE_OVERFLOW_FLAG) {
-                throw new Error('Protocol error: chunk size overflow');
-            }
-
-            if (head.flags & BleChunkHead.MISSED_CHUNKS_FLAG) {
-                // If missed chunks, retry the entire process
-                continue;
-            }
+            console.log(`Received first chunk of size ${responseChunk.length}`);
+            console.log('Chunk data is')
+            console.log(responseChunk);
 
             // If the response is empty, retry after 100ms
-            if (responseChunk.length === head.toBuffer().length) {
+            if (BleChunkHead.isNodata(responseChunk)) {
+                console.warn('Received empty chunk, retrying after 100ms...');
                 await new Promise(resolve => setTimeout(resolve, 100));  // Wait for 100ms
                 responseChunk = await this.io.read();
 
-                if (responseChunk.length === head.toBuffer().length) {
+                if (BleChunkHead.isNodata(responseChunk)) {
+                    console.error('Protocol error: received empty response twice');
                     throw new Error('Protocol error: received empty response twice');
                 }
             }
 
+            const head = BleChunkHead.fromBuffer(responseChunk);
+            console.log('Chunk head is')
+            console.log(head);
+
+            // Check for errors
+            if (head.flags & BleChunkHead.SIZE_OVERFLOW_FLAG) {
+                console.error('Protocol error: chunk size overflow');
+                throw new Error('Protocol error: chunk size overflow');
+            }
+
+            if (head.flags & BleChunkHead.MISSED_CHUNKS_FLAG) {
+                console.warn('Missed chunks detected, retrying...');
+                // If missed chunks, retry the entire process
+                continue;
+            }
+            
             // Read remaining chunks if necessary
             const responseChunks: BleChunk[] = [responseChunk];
 
             while (!isLastChunk(responseChunk)) {
                 responseChunk = await this.io.read();
+
+                // If server has response for us, next chunks can't be empty
+                if (BleChunkHead.isNodata(responseChunk)) {
+                    console.error('Protocol error: received empty response after first chunk');
+                    throw new Error('Protocol error: received empty response after first chunk');
+                }
+
+                console.log(`Received additional chunk of size ${responseChunk.length}`);
                 responseChunks.push(responseChunk);
             }
 
             // Merge the response chunks into a single BleMessage and return
+            console.log('All chunks received, merging response');
             return mergeUint8Arrays(responseChunks.map(chunk => chunk.slice(4)));
         }
     }
