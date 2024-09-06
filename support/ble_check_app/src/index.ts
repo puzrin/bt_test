@@ -35,6 +35,14 @@ class BleManager {
         const longMessage = 'A'.repeat(2000);
         const longResponse = await rpcClient.invoke('echo', longMessage);
         console.log(`Echo response (long): ${longResponse}`);
+
+        // Invoke ping
+        const ping_output = await rpcClient.invoke('ping');
+        console.log(`Ping response: ${ping_output}`);
+
+        // Invoke sum
+        const sum_output = await rpcClient.invoke('sum', 4, 5);
+        console.log(`Sum response: ${sum_output}`);
       } catch (error) {
         console.error('Error invoking RPC:', error);
       }

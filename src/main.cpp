@@ -15,6 +15,7 @@ void setup() {
 
     // Demo methods
     bleManager.rpc.addMethod("ping", []()-> std::string { return "pong"; });
+    bleManager.rpc.addMethod("sum", [](int32_t a, int32_t b)-> int32_t { return a + b; });
     bleManager.rpc.addMethod("echo", [](std::string msg)-> std::string { return msg; });
 
     bleManager.start();
