@@ -45,8 +45,8 @@ public:
 class BleChunker {
 public:
     // Max BLE MTU size usually 512 or 517 bytes. Set default transfer size a bit less.
-    BleChunker(size_t maxBlobSize = 500)
-        : maxBlobSize(maxBlobSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
+    BleChunker(size_t maxChunkSize = 500)
+        : maxChunkSize(maxChunkSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
 
     void consumeChunk(const BleChunk& chunk) {
         if (chunk.size() < BleChunkHead::SIZE) {
@@ -72,7 +72,7 @@ public:
         size_t newMessageSize = messageSize + (chunk.size() - BleChunkHead::SIZE);
 
         // Check for size overflow
-        if (newMessageSize > maxBlobSize) {
+        if (newMessageSize > maxChunkSize) {
             DEBUG("BLE Chunker: size overflow");
             skipTail = true;
             sendErrorResponse(BleChunkHead::SIZE_OVERFLOW_FLAG);
@@ -104,18 +104,16 @@ public:
 
             // Process the complete message
             if (onMessage) {
-                BleMessage response = onMessage(assembledMessage);
-                std::vector<BleChunk> responseChunks = splitMessageToChunks(response);
-                if (onRespond) onRespond(responseChunks);
+                response = splitMessageToChunks(onMessage(assembledMessage));
             }
         }
     }
 
     std::function<BleMessage(const BleMessage& message)> onMessage;
-    std::function<void(const std::vector<BleChunk>& chunks)> onRespond;
+    std::vector<BleChunk> response;  // Store response chunks here
 
 private:
-    size_t maxBlobSize;
+    size_t maxChunkSize;
     uint8_t currentMessageId;
     size_t messageSize;
     uint16_t expectedSequenceNumber;
@@ -125,6 +123,7 @@ private:
 
     void resetState() {
         inputChunks.clear();
+        response.clear();
         messageSize = 0;
         expectedSequenceNumber = 0;
         firstMessage = false;
@@ -134,7 +133,7 @@ private:
     std::vector<BleChunk> splitMessageToChunks(const BleMessage& message) {
         std::vector<BleChunk> chunks;
         size_t totalSize = message.size();
-        size_t chunkSize = maxBlobSize - BleChunkHead::SIZE;
+        size_t chunkSize = maxChunkSize - BleChunkHead::SIZE;
 
         if (totalSize == 0) {
             // Handle case when message is empty, send only the header with FINAL_CHUNK_FLAG
@@ -167,14 +166,10 @@ private:
     }
 
     void sendErrorResponse(uint8_t errorFlag) {
-        BleMessage errorMessage;
-        std::vector<BleChunk> errorChunks;
-
         BleChunk errorChunk(BleChunkHead::SIZE);
         BleChunkHead errorHead(currentMessageId, 0, errorFlag | BleChunkHead::FINAL_CHUNK_FLAG);
         errorHead.fillTo(errorChunk);
-        errorChunks.push_back(errorChunk);
 
-        if (onRespond) onRespond(errorChunks);
+        response = {errorChunk};  // Directly assign errorChunk to response
     }
 };

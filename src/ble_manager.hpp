@@ -66,19 +66,9 @@ private:
                 DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
                 return responseMessage;
             };
-            chunker.onRespond = [this](const std::vector<BleChunk>& chunks) {
-                for (const auto& chunk : chunks) {
-                    chunkQueue.push(chunk);
-                    DEBUG("BLE: Responding with chunk of length {}", uint32_t(chunk.size()));
-                }
-            };
         }
 
         void consumeChunk(BLECharacteristic* pCharacteristic) {
-            // Clear the queue for new RPC requests
-            while (!chunkQueue.empty()) {
-                chunkQueue.pop();
-            }
             std::string value = pCharacteristic->getValue();
             BleChunk chunk(value.begin(), value.end());
             DEBUG("BLE: Received chunk of length {}", uint32_t(chunk.size()));
@@ -86,15 +76,16 @@ private:
         }
 
         void sendData(BLECharacteristic* pCharacteristic) {
-            if (chunkQueue.empty()) {
+
+            if (chunker.response.empty()) {
                 static BleChunk noData{0};
                 pCharacteristic->setValue(noData.data(), uint32_t(noData.size()));
                 DEBUG("BLE: No data to send, sending empty chunk");
                 return;
             }
 
-            BleChunk chunk = chunkQueue.front();
-            chunkQueue.pop();
+            BleChunk chunk = chunker.response.front();
+            chunker.response.erase(chunker.response.begin());
             DEBUG("BLE: Sending chunk of length {}", uint32_t(chunk.size()));
             pCharacteristic->setValue(chunk.data(), uint32_t(chunk.size()));
         }
@@ -102,7 +93,6 @@ private:
     private:
         BleManager* manager;
         BleChunker chunker;
-        std::queue<BleChunk> chunkQueue;
     };
 
     std::string deviceName;

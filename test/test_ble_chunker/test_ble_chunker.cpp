@@ -6,11 +6,9 @@ protected:
     BleChunker* chunker;
 
     bool onMessageCalled;
-    bool onRespondCalled;
     BleMessage lastReceivedMessage;
-    std::vector<BleChunk> lastResponseChunks;
 
-    BleChunkerTest() : onMessageCalled(false), onRespondCalled(false) {}
+    BleChunkerTest() : onMessageCalled(false) {}
 
     BleMessage onMessageHandler(const BleMessage& message) {
         onMessageCalled = true;
@@ -19,21 +17,14 @@ protected:
         return response;
     }
 
-    void onRespondHandler(const std::vector<BleChunk>& chunks) {
-        onRespondCalled = true;
-        lastResponseChunks = chunks;
-    }
-
     virtual void SetUp() override {
         chunker = new BleChunker(512);
 
         chunker->onMessage = [this](const BleMessage& message) { return onMessageHandler(message); };
-        chunker->onRespond = [this](const std::vector<BleChunk>& chunks) { onRespondHandler(chunks); };
 
         onMessageCalled = false;
-        onRespondCalled = false;
         lastReceivedMessage.clear();
-        lastResponseChunks.clear();
+        chunker->response.clear();
     }
 
     virtual void TearDown() override {
@@ -61,8 +52,9 @@ TEST_F(BleChunkerTest, ChunkAssembly) {
     EXPECT_TRUE(onMessageCalled);
     EXPECT_EQ(static_cast<size_t>(6), lastReceivedMessage.size());
     EXPECT_EQ(std::vector<uint8_t>({'A', 'B', 'C', 'D', 'E', 'F'}), lastReceivedMessage);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+
+    // Check response is correctly assembled
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
 }
 
 TEST_F(BleChunkerTest, MessageSizeOverflow) {
@@ -71,10 +63,11 @@ TEST_F(BleChunkerTest, MessageSizeOverflow) {
     chunker->consumeChunk(largeChunk);
 
     EXPECT_FALSE(onMessageCalled);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
 
-    BleChunkHead errorHead(lastResponseChunks[0]);
+    // Check response contains an error for size overflow
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
+
+    BleChunkHead errorHead(chunker->response[0]);
     EXPECT_EQ(BleChunkHead::SIZE_OVERFLOW_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
 }
 
@@ -86,10 +79,11 @@ TEST_F(BleChunkerTest, MissedChunks) {
     chunker->consumeChunk(chunk2);
 
     EXPECT_FALSE(onMessageCalled);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
 
-    BleChunkHead errorHead(lastResponseChunks[0]);
+    // Check response contains an error for missed chunks
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
+
+    BleChunkHead errorHead(chunker->response[0]);
     EXPECT_EQ(BleChunkHead::MISSED_CHUNKS_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
 }
 
@@ -103,13 +97,10 @@ TEST_F(BleChunkerTest, MultipleMessages) {
     EXPECT_TRUE(onMessageCalled);
     EXPECT_EQ(static_cast<size_t>(6), lastReceivedMessage.size());
     EXPECT_EQ(std::vector<uint8_t>({'M', 'S', 'G', '1', 'S', 'T'}), lastReceivedMessage);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
 
     onMessageCalled = false;
-    onRespondCalled = false;
     lastReceivedMessage.clear();
-    lastResponseChunks.clear();
 
     BleChunk chunk2a = createChunk(2, 0, 0, {'2', 'N', 'D'});
     BleChunk chunk2b = createChunk(2, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'M', 'S', 'G'});
@@ -120,8 +111,7 @@ TEST_F(BleChunkerTest, MultipleMessages) {
     EXPECT_TRUE(onMessageCalled);
     EXPECT_EQ(static_cast<size_t>(6), lastReceivedMessage.size());
     EXPECT_EQ(std::vector<uint8_t>({'2', 'N', 'D', 'M', 'S', 'G'}), lastReceivedMessage);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
 }
 
 TEST_F(BleChunkerTest, TooShortChunk) {
@@ -136,8 +126,7 @@ TEST_F(BleChunkerTest, TooShortChunk) {
     EXPECT_TRUE(onMessageCalled);
     EXPECT_EQ(static_cast<size_t>(6), lastReceivedMessage.size());
     EXPECT_EQ(std::vector<uint8_t>({'A', 'B', 'C', 'D', 'E', 'F'}), lastReceivedMessage);
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
 }
 
 TEST_F(BleChunkerTest, ZeroLengthMessageResponse) {
@@ -146,12 +135,11 @@ TEST_F(BleChunkerTest, ZeroLengthMessageResponse) {
     BleChunk chunk1 = createChunk(1, 0, BleChunkHead::FINAL_CHUNK_FLAG, {'A', 'B', 'C'});
     chunker->consumeChunk(chunk1);
 
-    EXPECT_TRUE(onRespondCalled);
-    EXPECT_EQ(static_cast<size_t>(1), lastResponseChunks.size());
+    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
 
-    BleChunkHead responseHead(lastResponseChunks[0]);
+    BleChunkHead responseHead(chunker->response[0]);
     EXPECT_EQ(BleChunkHead::FINAL_CHUNK_FLAG, responseHead.flags);
-    EXPECT_EQ(BleChunkHead::SIZE, lastResponseChunks[0].size()); // Only the header, no data
+    EXPECT_EQ(BleChunkHead::SIZE, chunker->response[0].size()); // Only the header, no data
 }
 
 int main(int argc, char **argv) {

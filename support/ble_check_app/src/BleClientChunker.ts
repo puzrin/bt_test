@@ -115,8 +115,8 @@ export class BleClientChunker implements BinaryTransport {
 
             // Check for errors
             if (head.flags & BleChunkHead.SIZE_OVERFLOW_FLAG) {
-                console.error('Protocol error: chunk size overflow');
-                throw new Error('Protocol error: chunk size overflow');
+                console.error('Protocol error: size overflow');
+                throw new Error('Protocol error: size overflow');
             }
 
             if (head.flags & BleChunkHead.MISSED_CHUNKS_FLAG) {
