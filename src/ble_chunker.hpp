@@ -45,8 +45,8 @@ public:
 class BleChunker {
 public:
     // Max BLE MTU size usually 512 or 517 bytes. Set default transfer size a bit less.
-    BleChunker(size_t maxChunkSize = 500)
-        : maxChunkSize(maxChunkSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
+    BleChunker(size_t maxChunkSize = 500, size_t maxMessageSize = 65536)
+        : maxChunkSize(maxChunkSize), maxMessageSize(maxMessageSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
 
     void consumeChunk(const BleChunk& chunk) {
         if (chunk.size() < BleChunkHead::SIZE) {
@@ -71,8 +71,8 @@ public:
 
         size_t newMessageSize = messageSize + (chunk.size() - BleChunkHead::SIZE);
 
-        // Check for size overflow
-        if (newMessageSize > maxChunkSize) {
+        // Check message size overflow
+        if (newMessageSize > maxMessageSize) {
             DEBUG("BLE Chunker: size overflow");
             skipTail = true;
             sendErrorResponse(BleChunkHead::SIZE_OVERFLOW_FLAG);
@@ -114,6 +114,7 @@ public:
 
 private:
     size_t maxChunkSize;
+    size_t maxMessageSize;
     uint8_t currentMessageId;
     size_t messageSize;
     uint16_t expectedSequenceNumber;
@@ -170,6 +171,6 @@ private:
         BleChunkHead errorHead(currentMessageId, 0, errorFlag | BleChunkHead::FINAL_CHUNK_FLAG);
         errorHead.fillTo(errorChunk);
 
-        response = {errorChunk};  // Directly assign errorChunk to response
+        response = {errorChunk};
     }
 };

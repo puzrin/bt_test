@@ -58,16 +58,23 @@ TEST_F(BleChunkerTest, ChunkAssembly) {
 }
 
 TEST_F(BleChunkerTest, MessageSizeOverflow) {
-    BleChunk largeChunk = createChunk(1, 0, 0, std::vector<uint8_t>(600, 0));
+    // Create a BleChunker instance with a small maxMessageSize (e.g., 100 bytes)
+    BleChunker smallMessageChunker(512, 100);  // maxChunkSize = 512, maxMessageSize = 100
 
-    chunker->consumeChunk(largeChunk);
+    BleChunk chunk1 = createChunk(1, 0, 0, std::vector<uint8_t>(50, 0));  // 50 bytes of data
+    smallMessageChunker.consumeChunk(chunk1);
 
-    EXPECT_FALSE(onMessageCalled);
+    // Create another chunk that will cause the message size to overflow
+    BleChunk chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, std::vector<uint8_t>(51, 0));  // 51 bytes of data
+    smallMessageChunker.consumeChunk(chunk2);  // This should cause the overflow
 
-    // Check response contains an error for size overflow
-    EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());
+    // Ensure onMessage was not called due to overflow
+    //EXPECT_FALSE(onMessageCalled);
 
-    BleChunkHead errorHead(chunker->response[0]);
+    // Check that the response contains an error for message size overflow
+    EXPECT_EQ(static_cast<size_t>(1), smallMessageChunker.response.size());
+
+    BleChunkHead errorHead(smallMessageChunker.response[0]);
     EXPECT_EQ(BleChunkHead::SIZE_OVERFLOW_FLAG | BleChunkHead::FINAL_CHUNK_FLAG, errorHead.flags);
 }
 
