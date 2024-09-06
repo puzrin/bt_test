@@ -1,10 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 #include <map>
 #include <vector>
 #include <queue>
@@ -20,34 +17,35 @@ public:
 
     void start() {
         const std::string name = deviceName.substr(0, 20); // Limit name length
-        BLEDevice::init(name);
-        BLEDevice::setMTU(517); // Set the maximum MTU size the server will support
+        NimBLEDevice::init(name);
+        NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
 
         // Setup services
 
-        server = BLEDevice::createServer();
+        server = NimBLEDevice::createServer();
         server->setCallbacks(new ServerCallbacks(this));
 
         service = server->createService(SERVICE_UUID);
         characteristic = service->createCharacteristic(
             CHARACTERISTIC_UUID,
-            BLECharacteristic::PROPERTY_READ |
-            BLECharacteristic::PROPERTY_WRITE
+            NIMBLE_PROPERTY::READ |
+            NIMBLE_PROPERTY::WRITE
         );
-        characteristic->addDescriptor(new BLE2902());
+        // Nimble manages the CCCD internally, no descriptor needed
+        // characteristic->addDescriptor(new BLE2902());
         characteristic->setCallbacks(new CharacteristicCallbacks(this));
 
         service->start();
 
         // Configure advertising
 
-        BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+        NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(SERVICE_UUID);
         pAdvertising->setScanResponse(true);
         pAdvertising->setMinPreferred(0x06);
         
-        BLEDevice::startAdvertising();
-        DEBUG("BLE intialized");
+        NimBLEDevice::startAdvertising();
+        DEBUG("BLE initialized");
     }
 
     JsonRpcDispatcher rpc;
@@ -68,14 +66,14 @@ private:
             };
         }
 
-        void consumeChunk(BLECharacteristic* pCharacteristic) {
+        void consumeChunk(NimBLECharacteristic* pCharacteristic) {
             std::string value = pCharacteristic->getValue();
             BleChunk chunk(value.begin(), value.end());
             DEBUG("BLE: Received chunk of length {}", uint32_t(chunk.size()));
             chunker.consumeChunk(chunk);
         }
 
-        void sendData(BLECharacteristic* pCharacteristic) {
+        void sendData(NimBLECharacteristic* pCharacteristic) {
 
             if (chunker.response.empty()) {
                 static BleChunk noData{0};
@@ -96,54 +94,54 @@ private:
     };
 
     std::string deviceName;
-    BLEServer* server;
-    BLEService* service;
-    BLECharacteristic* characteristic;
+    NimBLEServer* server;
+    NimBLEService* service;
+    NimBLECharacteristic* characteristic;
     std::map<uint16_t, Session*> sessions;
 
     static const char* SERVICE_UUID;
     static const char* CHARACTERISTIC_UUID;
 
-    class ServerCallbacks : public BLEServerCallbacks {
+    class ServerCallbacks : public NimBLEServerCallbacks {
     public:
         ServerCallbacks(BleManager* manager) : manager(manager) {}
 
-        void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t *param) override {
-            uint16_t connId = param->connect.conn_id;
-            manager->sessions[connId] = new Session(manager);
-            DEBUG("BLE: Device connected with connection ID {}", connId);
+        void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
+            uint16_t conn_handle = desc->conn_handle;
+            manager->sessions[conn_handle] = new Session(manager);
+            DEBUG("BLE: Device connected with connection ID {}", conn_handle);
             // Update connection parameters for maximum performance and stability
             // min conn interval 7.5ms, max conn interval 15ms, latency 0, timeout 2s
-            pServer->updateConnParams(param->connect.remote_bda, 0x06, 0x12, 0, 200);
+            pServer->updateConnParams(conn_handle, 0x06, 0x12, 0, 200);
         }
 
-        void onDisconnect(BLEServer* pServer, esp_ble_gatts_cb_param_t *param) override {
-            uint16_t connId = param->disconnect.conn_id;
-            DEBUG("BLE: Device disconnected with connection ID {}", connId);
-            delete manager->sessions[connId];
-            manager->sessions.erase(connId);
+        void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
+            uint16_t conn_handle = desc->conn_handle;
+            DEBUG("BLE: Device disconnected with connection ID {}", conn_handle);
+            delete manager->sessions[conn_handle];
+            manager->sessions.erase(conn_handle);
         }
 
     private:
         BleManager* manager;
     };
 
-    class CharacteristicCallbacks : public BLECharacteristicCallbacks {
+    class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
     public:
         CharacteristicCallbacks(BleManager* manager) : manager(manager) {}
 
-        void onWrite(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t *param) override {
-            uint16_t connId = param->write.conn_id;
-            if (!manager->sessions.count(connId)) return;
-            DEBUG("BLE: Writing to characteristic with connection ID {}", connId);
-            manager->sessions[connId]->consumeChunk(pCharacteristic);
+        void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+            uint16_t conn_handle = desc->conn_handle;
+            if (!manager->sessions.count(conn_handle)) return;
+            DEBUG("BLE: Writing to characteristic with connection ID {}", conn_handle);
+            manager->sessions[conn_handle]->consumeChunk(pCharacteristic);
         }
 
-        void onRead(BLECharacteristic* pCharacteristic, esp_ble_gatts_cb_param_t *param) override {
-            uint16_t connId = param->read.conn_id;
-            if (!manager->sessions.count(connId)) return;
-            DEBUG("BLE: Reading from characteristic with connection ID {}", connId);
-            manager->sessions[connId]->sendData(pCharacteristic);
+        void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+            uint16_t conn_handle = desc->conn_handle;
+            if (!manager->sessions.count(conn_handle)) return;
+            DEBUG("BLE: Reading from characteristic with connection ID {}", conn_handle);
+            manager->sessions[conn_handle]->sendData(pCharacteristic);
         }
 
     private:
