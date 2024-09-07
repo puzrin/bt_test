@@ -77,7 +77,6 @@ export class BleClientChunker implements BinaryTransport {
             chunks.push(mergeUint8Arrays([head.toBuffer(), chunk]));
         }
 
-        console.log(`Message split into ${chunks.length} chunks`); // Log the number of chunks
         return chunks;
     }
 
@@ -87,40 +86,30 @@ export class BleClientChunker implements BinaryTransport {
 
             // Send all chunks
             for (const chunk of chunks) {
-                console.log(`Sending chunk of size ${chunk.length}`);
                 await this.io.write(chunk);
             }
 
             // Read the first chunk of the response
             let responseChunk = await this.io.read();
-            console.log(`Received first chunk of size ${responseChunk.length}`);
-            console.log('Chunk data is')
-            console.log(responseChunk);
 
             // If the response is empty, retry after 100ms
             if (BleChunkHead.isNodata(responseChunk)) {
-                console.warn('Received empty chunk, retrying after 100ms...');
                 await new Promise(resolve => setTimeout(resolve, 100));  // Wait for 100ms
                 responseChunk = await this.io.read();
 
                 if (BleChunkHead.isNodata(responseChunk)) {
-                    console.error('Protocol error: received empty response twice');
                     throw new Error('Protocol error: received empty response twice');
                 }
             }
 
             const head = BleChunkHead.fromBuffer(responseChunk);
-            console.log('Chunk head is')
-            console.log(head);
 
             // Check for errors
             if (head.flags & BleChunkHead.SIZE_OVERFLOW_FLAG) {
-                console.error('Protocol error: size overflow');
                 throw new Error('Protocol error: size overflow');
             }
 
             if (head.flags & BleChunkHead.MISSED_CHUNKS_FLAG) {
-                console.warn('Missed chunks detected, retrying...');
                 // If missed chunks, retry the entire process
                 continue;
             }
@@ -133,16 +122,13 @@ export class BleClientChunker implements BinaryTransport {
 
                 // If server has response for us, next chunks can't be empty
                 if (BleChunkHead.isNodata(responseChunk)) {
-                    console.error('Protocol error: received empty response after first chunk');
                     throw new Error('Protocol error: received empty response after first chunk');
                 }
 
-                console.log(`Received additional chunk of size ${responseChunk.length}`);
                 responseChunks.push(responseChunk);
             }
 
             // Merge the response chunks into a single BleMessage and return
-            console.log('All chunks received, merging response');
             return mergeUint8Arrays(responseChunks.map(chunk => chunk.slice(4)));
         }
     }

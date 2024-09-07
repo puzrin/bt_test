@@ -63,4 +63,22 @@ export class BleConnector implements IO {
         const value = await this.characteristic.readValue();
         return new Uint8Array(value.buffer);
     }
+
+    async disconnect(): Promise<void> {
+        try {
+            if (this.gatt && this.gatt.connected) {
+                console.log(`Disconnecting from GATT server on ${this.device?.name}...`);
+                this.gatt.disconnect();
+            } else {
+                console.log('No connected GATT server to disconnect from.');
+            }
+        } catch (error) {
+            console.error('Disconnection failed:', error);
+        } finally {
+            this.device = null;
+            this.gatt = null;
+            this.characteristic = null;
+            console.log('Disconnected and resources cleared.');
+        }
+    }
 }
