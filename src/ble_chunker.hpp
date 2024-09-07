@@ -98,6 +98,8 @@ public:
 
             // Assemble the complete message
             BleMessage assembledMessage;
+            assembledMessage.reserve(messageSize);
+            
             for (const auto& chunk : inputChunks) {
                 assembledMessage.insert(assembledMessage.end(), chunk.begin() + BleChunkHead::SIZE, chunk.end());
             }
