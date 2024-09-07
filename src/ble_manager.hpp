@@ -19,32 +19,37 @@ public:
         const std::string name = deviceName.substr(0, 20); // Limit name length
         NimBLEDevice::init(name);
         NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
+        NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
 
-        // Setup services
+        /* Seems Web BT not supports encryption for now
+        // Basic channel encryption ("Just Works")
+        NimBLEDevice::setSecurityAuth(false, false, true); // Just Works (no MITM, no bonding, encryption required)
+        NimBLEDevice::setSecurityPasskey(123456); // Set random passkey (not required in Just Works mode)
+        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY); // Set no confirmation needed (Just Works)
+        NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC); // Require encryption for all connections
+        */
 
         server = NimBLEDevice::createServer();
         server->setCallbacks(new ServerCallbacks(this));
 
+        // Setup RPC service and characteristic.
         service = server->createService(SERVICE_UUID);
         characteristic = service->createCharacteristic(
             CHARACTERISTIC_UUID,
-            NIMBLE_PROPERTY::READ |
-            NIMBLE_PROPERTY::WRITE
+            // This hangs comm if enabled. Seems Web BT not supports encryption
+            //NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC |
+            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE            
         );
-        // Nimble manages the CCCD internally, no descriptor needed
-        // characteristic->addDescriptor(new BLE2902());
         characteristic->setCallbacks(new CharacteristicCallbacks(this));
-
         service->start();
 
         // Configure advertising
-
         NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
         pAdvertising->addServiceUUID(SERVICE_UUID);
         pAdvertising->setScanResponse(true);
         pAdvertising->setMinPreferred(0x06);
-        
         NimBLEDevice::startAdvertising();
+
         DEBUG("BLE initialized");
     }
 
