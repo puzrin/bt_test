@@ -61,10 +61,14 @@ private:
         Session(BleManager* manager)
             : manager(manager), chunker() {
             chunker.onMessage = [this, manager](const BleMessage& message) {
+                size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+                size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+                DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
+
                 std::string request(message.begin(), message.end());
-                DEBUG("RPC request: {}", request.c_str());
+                //DEBUG("RPC request: {}", request.c_str());
                 std::string response = manager->rpc.dispatch(request);
-                //DEBUG("RPC response: {}", response.c_str());
+                DEBUG("RPC response: {}", response.c_str());
                 BleMessage responseMessage(response.begin(), response.end());
                 DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
                 return responseMessage;
@@ -89,7 +93,7 @@ private:
 
             BleChunk chunk = chunker.response.front();
             chunker.response.erase(chunker.response.begin());
-            DEBUG("BLE: Sending chunk of length {}", uint32_t(chunk.size()));
+            //DEBUG("BLE: Sending chunk of length {}", uint32_t(chunk.size()));
             pCharacteristic->setValue(chunk.data(), uint32_t(chunk.size()));
         }
 
@@ -116,8 +120,8 @@ private:
             manager->sessions[conn_handle] = new Session(manager);
             DEBUG("BLE: Device connected with connection ID {}", conn_handle);
             // Update connection parameters for maximum performance and stability
-            // min conn interval 7.5ms, max conn interval 15ms, latency 0, timeout 2s
-            pServer->updateConnParams(conn_handle, 0x06, 0x12, 0, 200);
+            // min conn interval 7.5ms, max conn interval 7.5ms, latency 0, timeout 2s
+            pServer->updateConnParams(conn_handle, 0x06, 0x06, 0, 200);
         }
 
         void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
@@ -125,6 +129,10 @@ private:
             DEBUG("BLE: Device disconnected with connection ID {}", conn_handle);
             delete manager->sessions[conn_handle];
             manager->sessions.erase(conn_handle);
+        }
+
+        void onMTUChange(uint16_t mtu, ble_gap_conn_desc* desc) override {
+            DEBUG("BLE: MTU updated. Connection handle: {}, New MTU: {}", desc->conn_handle, mtu);
         }
 
     private:
@@ -138,14 +146,14 @@ private:
         void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
-            DEBUG("BLE: Writing to characteristic with connection ID {}", conn_handle);
+            //DEBUG("BLE: Writing to characteristic with connection ID {}", conn_handle);
             manager->sessions[conn_handle]->consumeChunk(pCharacteristic);
         }
 
         void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
-            DEBUG("BLE: Reading from characteristic with connection ID {}", conn_handle);
+            //DEBUG("BLE: Reading from characteristic with connection ID {}", conn_handle);
             manager->sessions[conn_handle]->sendData(pCharacteristic);
         }
 
