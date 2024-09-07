@@ -21,14 +21,6 @@ public:
         NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
         NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
 
-        /* Seems Web BT not supports encryption for now
-        // Basic channel encryption ("Just Works")
-        NimBLEDevice::setSecurityAuth(false, false, true); // Just Works (no MITM, no bonding, encryption required)
-        NimBLEDevice::setSecurityPasskey(123456); // Set random passkey (not required in Just Works mode)
-        NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY); // Set no confirmation needed (Just Works)
-        NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC); // Require encryption for all connections
-        */
-
         server = NimBLEDevice::createServer();
         server->setCallbacks(new ServerCallbacks(this));
 
@@ -40,6 +32,7 @@ public:
             //NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC |
             NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE            
         );
+
         characteristic->setCallbacks(new CharacteristicCallbacks(this));
         service->start();
 
@@ -118,7 +111,12 @@ private:
         void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             manager->sessions[conn_handle] = new Session(manager);
-            DEBUG("BLE: Device connected with connection ID {}", conn_handle);
+            DEBUG("BLE: Device connected, conn_handle {}, encryption: {}", conn_handle, uint8_t(desc->sec_state.encrypted));
+
+            // Set the maximum data length the server will support
+            // (!) Seems not actual, effects not visible
+            pServer->setDataLen(conn_handle, 251);
+
             // Update connection parameters for maximum performance and stability
             // min conn interval 7.5ms, max conn interval 7.5ms, latency 0, timeout 2s
             pServer->updateConnParams(conn_handle, 0x06, 0x06, 0, 200);
@@ -126,13 +124,13 @@ private:
 
         void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
-            DEBUG("BLE: Device disconnected with connection ID {}", conn_handle);
+            DEBUG("BLE: Device disconnected, conn_handle {}", conn_handle);
             delete manager->sessions[conn_handle];
             manager->sessions.erase(conn_handle);
         }
 
         void onMTUChange(uint16_t mtu, ble_gap_conn_desc* desc) override {
-            DEBUG("BLE: MTU updated. Connection handle: {}, New MTU: {}", desc->conn_handle, mtu);
+            DEBUG("BLE: MTU updated to {}, conn_handle {}", mtu, desc->conn_handle);
         }
 
     private:
@@ -146,14 +144,14 @@ private:
         void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
-            //DEBUG("BLE: Writing to characteristic with connection ID {}", conn_handle);
+            //DEBUG("BLE: Writing to characteristic, conn_handle {}", conn_handle);
             manager->sessions[conn_handle]->consumeChunk(pCharacteristic);
         }
 
         void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
-            //DEBUG("BLE: Reading from characteristic with connection ID {}", conn_handle);
+            //DEBUG("BLE: Reading from characteristic, conn_handle {}", conn_handle);
             manager->sessions[conn_handle]->sendData(pCharacteristic);
         }
 

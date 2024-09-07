@@ -11,27 +11,27 @@ export class BleConnector implements IO {
     async connect(): Promise<void> {
         try {
             console.log('Scanning for devices...');
+
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [{ services: [BleConnector.SERVICE_UUID] }]
             });
-
-            if (!this.device) {
-                throw new Error('No device found during scan.');
-            }
+            if (!this.device) throw new Error('No device found during scan.');
 
             console.log(`Connecting to GATT Server on ${this.device.name}...`);
+
             this.gatt = (await this.device.gatt?.connect()) || null;
             if (!this.gatt) {
                 throw new Error('Failed to connect to GATT server.');
             }
 
             console.log('Getting primary service...');
-            const service = await this.gatt.getPrimaryService(BleConnector.SERVICE_UUID);
-            if (!service) {
-                throw new Error('Failed to get primary service.');
-            }
+
+            const services = await this.gatt.getPrimaryServices();
+            if (services.length !== 1) throw new Error(`Bad amount of services (${services.length}).`);
+            const service = services[0];
 
             console.log('Getting characteristic...');
+
             this.characteristic = await service.getCharacteristic(BleConnector.CHARACTERISTIC_UUID);
             if (!this.characteristic) {
                 throw new Error('Failed to get characteristic.');
