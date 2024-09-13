@@ -19,5 +19,5 @@ static void LogOutputTask(void* pvParameters) {
 }
 
 void logger_init() {
-    xTaskCreate(LogOutputTask, "LogOutputTask", 4096, NULL, 1, NULL);
+    xTaskCreate(LogOutputTask, "LogOutputTask", 1024 * 4, NULL, 1, NULL);
 }

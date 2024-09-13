@@ -3,15 +3,25 @@
 #include "ble_manager.hpp"
 #include "logger.hpp"
 
-
-Blinker blinker;
+#include "blink.h"
 
 BleManager bleManager("Reflow Table");
 
 void setup() {
     logger_init();
+    blink_init();
 
-    blinker.loop({ 300, 300, 1000, 1000 });
+    blink.loop({
+        { {255}, 300 },
+        { 0, 300 },
+        { 255, 300 },
+        { 0, 300 },
+        blink.flowTo({255}, 1500),
+        blink.flowTo(0, 1500),
+        blink.flowTo(255, 1500),
+        blink.flowTo(0, 1500),
+        { 0, 1000 }
+    });
 
     // Demo methods
     bleManager.rpc.addMethod("ping", []()-> std::string { return "pong"; });
