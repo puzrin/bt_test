@@ -1,15 +1,14 @@
-#include "json_rpc_dispatcher.hpp"
-#include "blinker.hpp"
 #include "ble_manager.hpp"
 #include "logger.hpp"
-
 #include "blink.h"
+#include "btn.hpp"
 
 BleManager bleManager("Reflow Table");
 
 void setup() {
     logger_init();
     blink_init();
+    btn_init();
 
     blink.loop({
         { {255}, 300 },
