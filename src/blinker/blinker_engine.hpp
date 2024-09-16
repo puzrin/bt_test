@@ -62,7 +62,7 @@ public:
 };
 
 template<typename Driver>
-class Blinker {
+class BlinkerEngine {
 public:
     struct Action {
         typename Driver::DataType value;
@@ -80,8 +80,8 @@ public:
             : value{std::array<uint8_t, 1>{singleValue}}, period(period), isAnimated(isAnimated) {}
     };
 
-    Blinker() : driver(), sequenceQueue{},
-        hasNewJob(false), working(false), sequence{}, currentActionIdx(0), actionProgress(0), prevActionValue{} {}
+    BlinkerEngine() : driver(), sequenceQueue{}, prevTickTs(0), hasNewJob(false), working(false),
+        sequence{}, currentActionIdx(0), actionProgress(0), prevActionValue{} {}
 
     void loop(const std::initializer_list<Action>& actions) { updateSequence(actions, true); }
 
@@ -94,7 +94,12 @@ public:
 
     static inline const Action OFF = { typename Driver::DataType{}, 0 };
 
-    void tick(int32_t throttle_interval) {
+    void tick(uint32_t msTimestamp) {
+        if (prevTickTs == 0) { prevTickTs = msTimestamp; return; }
+
+        uint32_t elapsed = msTimestamp - prevTickTs;
+        prevTickTs = msTimestamp;
+
         if (sequenceQueue.read(sequence)) hasNewJob = true;
 
         if (hasNewJob) {
@@ -106,7 +111,7 @@ public:
 
         if (working) {
             const auto& action = sequence.actions[currentActionIdx];
-            actionProgress = std::min(actionProgress + throttle_interval, action.period);
+            actionProgress = std::min(actionProgress + elapsed, action.period);
 
             // Calculate & set led value
             if (action.isAnimated) {
@@ -158,6 +163,7 @@ private:
     BlinkerSimpleQueue<Sequence> sequenceQueue;
 
     // Ticker states
+    uint32_t prevTickTs;
     bool hasNewJob;
     bool working;
     Sequence sequence;

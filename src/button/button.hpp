@@ -1,11 +1,11 @@
 #pragma once
 
 #include <Arduino.h>
-#include "button.hpp"
+#include "button_engine.hpp"
 
-class BtnDriver : public IButtonDriver {
+class ButtonDriver : public IButtonDriver {
 public:
-    BtnDriver() : initialized(false) {};
+    ButtonDriver() : initialized(false) {};
     bool get() override {
         if (!initialized) {
             initialized = true;
@@ -18,7 +18,7 @@ private:
     bool initialized;
 };
 
-using Btn = Button<BtnDriver>;
+using Button = ButtonEngine<ButtonDriver>;
 
-extern Btn btn;
-void btn_init();
+extern Button button;
+void button_init();

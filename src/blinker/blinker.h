@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include "blinker.hpp"
+#include "blinker_engine.hpp"
 
 class LedDriver : public IBlinkerLED<1> {
 public:
@@ -19,7 +19,7 @@ private:
     bool initialized;
 };
 
-using Blink = Blinker<LedDriver>;
+using Blinker = BlinkerEngine<LedDriver>;
 
-extern Blink blink;
-void blink_init();
+extern Blinker blinker;
+void blinker_init();

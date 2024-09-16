@@ -1,24 +1,24 @@
 #include "ble_manager.hpp"
 #include "logger.hpp"
-#include "blink.h"
-#include "btn.hpp"
+#include "blinker/blinker.h"
+#include "button/button.hpp"
 
 BleManager bleManager("Reflow Table");
 
 void setup() {
     logger_init();
-    blink_init();
-    btn_init();
+    blinker_init();
+    button_init();
 
-    blink.loop({
+    blinker.loop({
         { {255}, 300 },
         { 0, 300 },
         { 255, 300 },
         { 0, 300 },
-        blink.flowTo({255}, 1500),
-        blink.flowTo(0, 1500),
-        blink.flowTo(255, 1500),
-        blink.flowTo(0, 1500),
+        blinker.flowTo({255}, 1500),
+        blinker.flowTo(0, 1500),
+        blinker.flowTo(255, 1500),
+        blinker.flowTo(0, 1500),
         { 0, 1000 }
     });
 

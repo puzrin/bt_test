@@ -7,9 +7,9 @@ class IButtonDriver {
 };
 
 template <typename Driver>
-class Button {
+class ButtonEngine {
 public:
-    Button() : driver(), state(START), unfilteredBtn(false), btnPressed(false),
+    ButtonEngine() : driver(), state(START), unfilteredBtn(false), btnPressed(false),
         unfilteredBtnTimestamp(0), btnToggleTimestamp(0), prevPeriod(0), currentPeriod(0) {}
 
     enum Event {
