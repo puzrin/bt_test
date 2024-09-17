@@ -8,6 +8,7 @@
 #include <functional>
 #include "json_rpc_dispatcher.hpp"
 #include "ble_chunker.hpp"
+#include "ble_auth_store.hpp" 
 #include "logger.hpp"
 
 class BleManager {
@@ -47,6 +48,7 @@ public:
     }
 
     JsonRpcDispatcher rpc;
+    BleAuthStore<> authStore;
 
 private:
     class Session {
