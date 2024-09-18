@@ -87,7 +87,8 @@ public:
             return;
         }
 
-        inputChunks.push_back(chunk);
+        assembledMessage.insert(assembledMessage.end(), chunk.begin() + BleChunkHead::SIZE, chunk.end());
+
         messageSize = newMessageSize;
         expectedSequenceNumber++;
 
@@ -96,20 +97,11 @@ public:
             // Set skipTail to true to prevent processing further chunks for this message
             skipTail = true;
 
-            // Assemble the complete message
-            BleMessage assembledMessage;
-            assembledMessage.reserve(messageSize);
-            
-            for (const auto& chunk : inputChunks) {
-                assembledMessage.insert(assembledMessage.end(), chunk.begin() + BleChunkHead::SIZE, chunk.end());
-            }
-
-            inputChunks.clear();
-
             // Process the complete message
             if (onMessage) {
                 response = splitMessageToChunks(onMessage(assembledMessage));
             }
+            assembledMessage = BleMessage();  // Clear the buffer after processing
         }
     }
 
@@ -124,10 +116,10 @@ private:
     uint16_t expectedSequenceNumber;
     bool firstMessage;
     bool skipTail;
-    std::vector<BleChunk> inputChunks;
+    BleMessage assembledMessage;
 
     void resetState() {
-        inputChunks.clear();
+        assembledMessage = BleMessage();
         response.clear();
         messageSize = 0;
         expectedSequenceNumber = 0;
