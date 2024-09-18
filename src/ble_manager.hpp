@@ -54,47 +54,24 @@ private:
     class Session {
     public:
         Session(BleManager* manager)
-            : manager(manager), chunker() {
+            : chunker(500, 16*1024 + 500), manager(manager) {
             chunker.onMessage = [this, manager](const std::vector<uint8_t>& message) {
                 size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
                 size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
                 DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
 
                 std::string request(message.begin(), message.end());
-                //DEBUG("RPC request: {}", request.c_str());
                 std::string response = manager->rpc.dispatch(request);
-                DEBUG("RPC response: {}", response.c_str());
                 std::vector<uint8_t> responseMessage(response.begin(), response.end());
                 DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
                 return responseMessage;
             };
         }
 
-        void consumeChunk(NimBLECharacteristic* pCharacteristic) {
-            std::string value = pCharacteristic->getValue();
-            std::vector<uint8_t> chunk(value.begin(), value.end());
-            DEBUG("BLE: Received chunk of length {}", uint32_t(chunk.size()));
-            chunker.consumeChunk(chunk);
-        }
-
-        void sendData(NimBLECharacteristic* pCharacteristic) {
-
-            if (chunker.response.empty()) {
-                static std::vector<uint8_t> noData{0};
-                pCharacteristic->setValue(noData.data(), uint32_t(noData.size()));
-                DEBUG("BLE: No data to send, sending empty chunk");
-                return;
-            }
-
-            std::vector<uint8_t> chunk = chunker.response.front();
-            chunker.response.erase(chunker.response.begin());
-            //DEBUG("BLE: Sending chunk of length {}", uint32_t(chunk.size()));
-            pCharacteristic->setValue(chunk.data(), uint32_t(chunk.size()));
-        }
+        BleChunker chunker;
 
     private:
         BleManager* manager;
-        BleChunker chunker;
     };
 
     std::string deviceName;
@@ -146,15 +123,16 @@ private:
         void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
-            //DEBUG("BLE: Writing to characteristic, conn_handle {}", conn_handle);
-            manager->sessions[conn_handle]->consumeChunk(pCharacteristic);
+            DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+            manager->sessions[conn_handle]->chunker.consumeChunk(
+                pCharacteristic->getValue(), pCharacteristic->getDataLength());
         }
 
         void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             if (!manager->sessions.count(conn_handle)) return;
             //DEBUG("BLE: Reading from characteristic, conn_handle {}", conn_handle);
-            manager->sessions[conn_handle]->sendData(pCharacteristic);
+            pCharacteristic->setValue(manager->sessions[conn_handle]->chunker.getResponseChunk());
         }
 
     private:

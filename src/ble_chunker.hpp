@@ -52,8 +52,8 @@ public:
         assembledMessage.reserve(maxMessageSize);
     }
 
-    void consumeChunk(const std::vector<uint8_t>& chunk) {
-        if (chunk.size() < BleChunkHead::SIZE) {
+    void consumeChunk(const uint8_t* chunk, size_t length) {
+        if (length < BleChunkHead::SIZE) {
             //DEBUG("BLE Chunker: received chunk is too small, ignoring");
             return;
         }
@@ -73,7 +73,7 @@ public:
             resetState();
         }
 
-        size_t newMessageSize = messageSize + (chunk.size() - BleChunkHead::SIZE);
+        size_t newMessageSize = messageSize + (length - BleChunkHead::SIZE);
 
         // Check message size overflow
         if (newMessageSize > maxMessageSize) {
@@ -91,7 +91,7 @@ public:
             return;
         }
 
-        assembledMessage.insert(assembledMessage.end(), chunk.begin() + BleChunkHead::SIZE, chunk.end());
+        assembledMessage.insert(assembledMessage.end(), chunk + BleChunkHead::SIZE, chunk + length);
 
         messageSize = newMessageSize;
         expectedSequenceNumber++;
@@ -106,6 +106,21 @@ public:
                 response = splitMessageToChunks(onMessage(assembledMessage));
             }
         }
+    }
+
+    void consumeChunk(const std::vector<uint8_t>& chunk) {
+        consumeChunk(chunk.data(), chunk.size());
+    }
+
+    std::vector<uint8_t> getResponseChunk() {
+        if (response.empty()) {
+            static const std::vector<uint8_t> noData{0};
+            return noData;
+        }
+
+        std::vector<uint8_t> chunk = std::move(response.front());
+        response.erase(response.begin());
+        return chunk;
     }
 
     std::function<std::vector<uint8_t>(const std::vector<uint8_t>& message)> onMessage;
