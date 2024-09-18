@@ -6,21 +6,21 @@ protected:
     BleChunker* chunker;
 
     bool onMessageCalled;
-    BleMessage lastReceivedMessage;
+    std::vector<uint8_t> lastReceivedMessage;
 
     BleChunkerTest() : onMessageCalled(false) {}
 
-    BleMessage onMessageHandler(const BleMessage& message) {
+    std::vector<uint8_t> onMessageHandler(const std::vector<uint8_t>& message) {
         onMessageCalled = true;
         lastReceivedMessage = message;
-        BleMessage response = {'O', 'K'};
+        std::vector<uint8_t> response = {'O', 'K'};
         return response;
     }
 
     virtual void SetUp() override {
         chunker = new BleChunker(512);
 
-        chunker->onMessage = [this](const BleMessage& message) { return onMessageHandler(message); };
+        chunker->onMessage = [this](const std::vector<uint8_t>& message) { return onMessageHandler(message); };
 
         onMessageCalled = false;
         lastReceivedMessage.clear();
@@ -31,10 +31,10 @@ protected:
         delete chunker;
     }
 
-    BleChunk createChunk(uint8_t messageId, uint16_t sequenceNumber, uint8_t flags, const std::vector<uint8_t>& data) {
+    std::vector<uint8_t> createChunk(uint8_t messageId, uint16_t sequenceNumber, uint8_t flags, const std::vector<uint8_t>& data) {
         BleChunkHead head(messageId, sequenceNumber, flags);
 
-        BleChunk chunk;
+        std::vector<uint8_t> chunk;
         chunk.resize(BleChunkHead::SIZE);
         head.fillTo(chunk);
         chunk.insert(chunk.end(), data.begin(), data.end());
@@ -43,8 +43,8 @@ protected:
 };
 
 TEST_F(BleChunkerTest, ChunkAssembly) {
-    BleChunk chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'});
-    BleChunk chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'});
+    std::vector<uint8_t> chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'});
+    std::vector<uint8_t> chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'});
 
     chunker->consumeChunk(chunk1);
     chunker->consumeChunk(chunk2);
@@ -61,11 +61,11 @@ TEST_F(BleChunkerTest, MessageSizeOverflow) {
     // Create a BleChunker instance with a small maxMessageSize (e.g., 100 bytes)
     BleChunker smallMessageChunker(512, 100);  // maxChunkSize = 512, maxMessageSize = 100
 
-    BleChunk chunk1 = createChunk(1, 0, 0, std::vector<uint8_t>(50, 0));  // 50 bytes of data
+    std::vector<uint8_t> chunk1 = createChunk(1, 0, 0, std::vector<uint8_t>(50, 0));  // 50 bytes of data
     smallMessageChunker.consumeChunk(chunk1);
 
     // Create another chunk that will cause the message size to overflow
-    BleChunk chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, std::vector<uint8_t>(51, 0));  // 51 bytes of data
+    std::vector<uint8_t> chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, std::vector<uint8_t>(51, 0));  // 51 bytes of data
     smallMessageChunker.consumeChunk(chunk2);  // This should cause the overflow
 
     // Ensure onMessage was not called due to overflow
@@ -79,8 +79,8 @@ TEST_F(BleChunkerTest, MessageSizeOverflow) {
 }
 
 TEST_F(BleChunkerTest, MissedChunks) {
-    BleChunk chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'});
-    BleChunk chunk2 = createChunk(1, 2, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'});
+    std::vector<uint8_t> chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'});
+    std::vector<uint8_t> chunk2 = createChunk(1, 2, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'});
 
     chunker->consumeChunk(chunk1);
     chunker->consumeChunk(chunk2);
@@ -95,8 +95,8 @@ TEST_F(BleChunkerTest, MissedChunks) {
 }
 
 TEST_F(BleChunkerTest, MultipleMessages) {
-    BleChunk chunk1a = createChunk(1, 0, 0, {'M', 'S', 'G'});
-    BleChunk chunk1b = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'1', 'S', 'T'});
+    std::vector<uint8_t> chunk1a = createChunk(1, 0, 0, {'M', 'S', 'G'});
+    std::vector<uint8_t> chunk1b = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'1', 'S', 'T'});
 
     chunker->consumeChunk(chunk1a);
     chunker->consumeChunk(chunk1b);
@@ -109,8 +109,8 @@ TEST_F(BleChunkerTest, MultipleMessages) {
     onMessageCalled = false;
     lastReceivedMessage.clear();
 
-    BleChunk chunk2a = createChunk(2, 0, 0, {'2', 'N', 'D'});
-    BleChunk chunk2b = createChunk(2, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'M', 'S', 'G'});
+    std::vector<uint8_t> chunk2a = createChunk(2, 0, 0, {'2', 'N', 'D'});
+    std::vector<uint8_t> chunk2b = createChunk(2, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'M', 'S', 'G'});
 
     chunker->consumeChunk(chunk2a);
     chunker->consumeChunk(chunk2b);
@@ -122,9 +122,9 @@ TEST_F(BleChunkerTest, MultipleMessages) {
 }
 
 TEST_F(BleChunkerTest, TooShortChunk) {
-    BleChunk chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'}); // Valid chunk
-    BleChunk shortChunk = {0x01, 0x00}; // Too short chunk
-    BleChunk chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'}); // Valid chunk
+    std::vector<uint8_t> chunk1 = createChunk(1, 0, 0, {'A', 'B', 'C'}); // Valid chunk
+    std::vector<uint8_t> shortChunk = {0x01, 0x00}; // Too short chunk
+    std::vector<uint8_t> chunk2 = createChunk(1, 1, BleChunkHead::FINAL_CHUNK_FLAG, {'D', 'E', 'F'}); // Valid chunk
 
     chunker->consumeChunk(chunk1);    // First valid chunk
     chunker->consumeChunk(shortChunk); // Short, invalid chunk (should be ignored)
@@ -137,9 +137,9 @@ TEST_F(BleChunkerTest, TooShortChunk) {
 }
 
 TEST_F(BleChunkerTest, ZeroLengthMessageResponse) {
-    chunker->onMessage = [](const BleMessage&) { return BleMessage(); };
+    chunker->onMessage = [](const std::vector<uint8_t>&) { return std::vector<uint8_t>(); };
 
-    BleChunk chunk1 = createChunk(1, 0, BleChunkHead::FINAL_CHUNK_FLAG, {'A', 'B', 'C'});
+    std::vector<uint8_t> chunk1 = createChunk(1, 0, BleChunkHead::FINAL_CHUNK_FLAG, {'A', 'B', 'C'});
     chunker->consumeChunk(chunk1);
 
     EXPECT_EQ(static_cast<size_t>(1), chunker->response.size());

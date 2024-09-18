@@ -11,9 +11,6 @@
 #define DEBUG(...)
 #endif
 
-using BleChunk = std::vector<uint8_t>;
-using BleMessage = std::vector<uint8_t>;
-
 class BleChunkHead {
 public:
     uint8_t messageId;
@@ -28,27 +25,34 @@ public:
     BleChunkHead(uint8_t messageId, uint16_t sequenceNumber, uint8_t flags)
         : messageId(messageId), sequenceNumber(sequenceNumber), flags(flags) {}
 
-    BleChunkHead(const BleChunk& chunk) {
+    BleChunkHead(const uint8_t* chunk) {
         messageId = chunk[0];
         sequenceNumber = static_cast<uint16_t>(chunk[1] | (chunk[2] << 8));
         flags = chunk[3];
     }
 
-    void fillTo(BleChunk& chunk) const {
+    BleChunkHead(const std::vector<uint8_t>& chunk) : BleChunkHead(chunk.data()) {}
+
+    void fillTo(uint8_t* chunk) const {
         chunk[0] = messageId;
         chunk[1] = static_cast<uint8_t>(sequenceNumber & 0xFF);
         chunk[2] = static_cast<uint8_t>((sequenceNumber >> 8) & 0xFF);
         chunk[3] = flags;
     }
+
+    void fillTo(std::vector<uint8_t>& chunk) const { fillTo(chunk.data()); }
 };
 
 class BleChunker {
 public:
     // Max BLE MTU size usually 512 or 517 bytes. Set default transfer size a bit less.
     BleChunker(size_t maxChunkSize = 500, size_t maxMessageSize = 65536)
-        : maxChunkSize(maxChunkSize), maxMessageSize(maxMessageSize), messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {}
+            : maxChunkSize(maxChunkSize), maxMessageSize(maxMessageSize),
+            messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {
+        assembledMessage.reserve(maxMessageSize);
+    }
 
-    void consumeChunk(const BleChunk& chunk) {
+    void consumeChunk(const std::vector<uint8_t>& chunk) {
         if (chunk.size() < BleChunkHead::SIZE) {
             //DEBUG("BLE Chunker: received chunk is too small, ignoring");
             return;
@@ -101,12 +105,11 @@ public:
             if (onMessage) {
                 response = splitMessageToChunks(onMessage(assembledMessage));
             }
-            assembledMessage = BleMessage();  // Clear the buffer after processing
         }
     }
 
-    std::function<BleMessage(const BleMessage& message)> onMessage;
-    std::vector<BleChunk> response;  // Store response chunks here
+    std::function<std::vector<uint8_t>(const std::vector<uint8_t>& message)> onMessage;
+    std::vector<std::vector<uint8_t>> response;  // Store response chunks here
 
 private:
     size_t maxChunkSize;
@@ -116,10 +119,10 @@ private:
     uint16_t expectedSequenceNumber;
     bool firstMessage;
     bool skipTail;
-    BleMessage assembledMessage;
+    std::vector<uint8_t> assembledMessage;
 
     void resetState() {
-        assembledMessage = BleMessage();
+        assembledMessage.clear();
         response.clear();
         messageSize = 0;
         expectedSequenceNumber = 0;
@@ -127,14 +130,14 @@ private:
         skipTail = false;
     }
 
-    std::vector<BleChunk> splitMessageToChunks(const BleMessage& message) {
-        std::vector<BleChunk> chunks;
+    std::vector<std::vector<uint8_t>> splitMessageToChunks(const std::vector<uint8_t>& message) {
+        std::vector<std::vector<uint8_t>> chunks;
         size_t totalSize = message.size();
         size_t chunkSize = maxChunkSize - BleChunkHead::SIZE;
 
         if (totalSize == 0) {
             // Handle case when message is empty, send only the header with FINAL_CHUNK_FLAG
-            BleChunk emptyChunk(BleChunkHead::SIZE);
+            std::vector<uint8_t> emptyChunk(BleChunkHead::SIZE);
             BleChunkHead head(currentMessageId, 0, BleChunkHead::FINAL_CHUNK_FLAG);
             head.fillTo(emptyChunk);
             chunks.push_back(emptyChunk);
@@ -145,7 +148,7 @@ private:
             size_t end = (i + chunkSize > totalSize) ? totalSize : i + chunkSize;
 
             // Reserve space for the header and data
-            BleChunk chunk;
+            std::vector<uint8_t> chunk;
             chunk.reserve(BleChunkHead::SIZE + (end - i));
 
             // Insert the header
@@ -163,7 +166,7 @@ private:
     }
 
     void sendErrorResponse(uint8_t errorFlag) {
-        BleChunk errorChunk(BleChunkHead::SIZE);
+        std::vector<uint8_t> errorChunk(BleChunkHead::SIZE);
         BleChunkHead errorHead(currentMessageId, 0, errorFlag | BleChunkHead::FINAL_CHUNK_FLAG);
         errorHead.fillTo(errorChunk);
 

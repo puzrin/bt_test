@@ -55,7 +55,7 @@ private:
     public:
         Session(BleManager* manager)
             : manager(manager), chunker() {
-            chunker.onMessage = [this, manager](const BleMessage& message) {
+            chunker.onMessage = [this, manager](const std::vector<uint8_t>& message) {
                 size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
                 size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
                 DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
@@ -64,7 +64,7 @@ private:
                 //DEBUG("RPC request: {}", request.c_str());
                 std::string response = manager->rpc.dispatch(request);
                 DEBUG("RPC response: {}", response.c_str());
-                BleMessage responseMessage(response.begin(), response.end());
+                std::vector<uint8_t> responseMessage(response.begin(), response.end());
                 DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
                 return responseMessage;
             };
@@ -72,7 +72,7 @@ private:
 
         void consumeChunk(NimBLECharacteristic* pCharacteristic) {
             std::string value = pCharacteristic->getValue();
-            BleChunk chunk(value.begin(), value.end());
+            std::vector<uint8_t> chunk(value.begin(), value.end());
             DEBUG("BLE: Received chunk of length {}", uint32_t(chunk.size()));
             chunker.consumeChunk(chunk);
         }
@@ -80,13 +80,13 @@ private:
         void sendData(NimBLECharacteristic* pCharacteristic) {
 
             if (chunker.response.empty()) {
-                static BleChunk noData{0};
+                static std::vector<uint8_t> noData{0};
                 pCharacteristic->setValue(noData.data(), uint32_t(noData.size()));
                 DEBUG("BLE: No data to send, sending empty chunk");
                 return;
             }
 
-            BleChunk chunk = chunker.response.front();
+            std::vector<uint8_t> chunk = chunker.response.front();
             chunker.response.erase(chunker.response.begin());
             //DEBUG("BLE: Sending chunk of length {}", uint32_t(chunk.size()));
             pCharacteristic->setValue(chunk.data(), uint32_t(chunk.size()));
