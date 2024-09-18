@@ -11,6 +11,58 @@
 #include "ble_auth_store.hpp" 
 #include "logger.hpp"
 
+namespace blem_ns {
+
+class Session {
+public:
+    Session(JsonRpcDispatcher& rpc)
+        : chunker(500, 16*1024 + 500), rpc(rpc) {
+        chunker.onMessage = [this, &rpc](const std::vector<uint8_t>& message) {
+            size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+            size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
+            DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
+
+            DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
+
+            std::vector<uint8_t> response;
+            rpc.dispatch(message, response);
+            return response;
+        };
+    }
+
+    BleChunker chunker;
+
+private:
+    JsonRpcDispatcher& rpc;
+};
+
+using Sessions = std::map<uint16_t, Session*>;
+
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+public:
+    CharacteristicCallbacks(blem_ns::Sessions& sessions) : sessions(sessions) {}
+
+    void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+        uint16_t conn_handle = desc->conn_handle;
+        if (!sessions.count(conn_handle)) return;
+        DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+        sessions[conn_handle]->chunker.consumeChunk(
+            pCharacteristic->getValue(), pCharacteristic->getDataLength());
+    }
+
+    void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+        uint16_t conn_handle = desc->conn_handle;
+        if (!sessions.count(conn_handle)) return;
+        //DEBUG("BLE: Reading from characteristic, conn_handle {}", conn_handle);
+        pCharacteristic->setValue(sessions[conn_handle]->chunker.getResponseChunk());
+    }
+
+private:
+    blem_ns::Sessions& sessions;
+};
+
+} // namespace blem_ns
+
 class BleManager {
 public:
     BleManager(const std::string& deviceName)
@@ -23,7 +75,7 @@ public:
         NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
 
         server = NimBLEDevice::createServer();
-        server->setCallbacks(new ServerCallbacks(this));
+        server->setCallbacks(new ServerCallbacks(*this));
 
         // Setup RPC service and characteristic.
         service = server->createService(SERVICE_UUID);
@@ -34,7 +86,7 @@ public:
             NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE            
         );
 
-        characteristic->setCallbacks(new CharacteristicCallbacks(this));
+        characteristic->setCallbacks(new blem_ns::CharacteristicCallbacks(sessions));
         service->start();
 
         // Configure advertising
@@ -51,45 +103,24 @@ public:
     BleAuthStore<> authStore;
 
 private:
-    class Session {
-    public:
-        Session(BleManager* manager)
-            : chunker(500, 16*1024 + 500), manager(manager) {
-            chunker.onMessage = [this, manager](const std::vector<uint8_t>& message) {
-                size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
-                size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
-                DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
-
-                DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
-
-                std::vector<uint8_t> response;
-                manager->rpc.dispatch(message, response);
-                return response;
-            };
-        }
-
-        BleChunker chunker;
-
-    private:
-        BleManager* manager;
-    };
-
     std::string deviceName;
     NimBLEServer* server;
     NimBLEService* service;
     NimBLECharacteristic* characteristic;
-    std::map<uint16_t, Session*> sessions;
+    blem_ns::Sessions sessions;
 
     static const char* SERVICE_UUID;
     static const char* CHARACTERISTIC_UUID;
 
     class ServerCallbacks : public NimBLEServerCallbacks {
     public:
-        ServerCallbacks(BleManager* manager) : manager(manager) {}
+        ServerCallbacks(BleManager& manager) : manager(manager) {}
 
         void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
+            using namespace blem_ns;
+
             uint16_t conn_handle = desc->conn_handle;
-            manager->sessions[conn_handle] = new Session(manager);
+            manager.sessions[conn_handle] = new Session(manager.rpc);
             DEBUG("BLE: Device connected, conn_handle {}, encryption: {}", conn_handle, uint8_t(desc->sec_state.encrypted));
 
             // Set the maximum data length the server will support
@@ -104,8 +135,8 @@ private:
         void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
             uint16_t conn_handle = desc->conn_handle;
             DEBUG("BLE: Device disconnected, conn_handle {}", conn_handle);
-            delete manager->sessions[conn_handle];
-            manager->sessions.erase(conn_handle);
+            delete manager.sessions[conn_handle];
+            manager.sessions.erase(conn_handle);
         }
 
         void onMTUChange(uint16_t mtu, ble_gap_conn_desc* desc) override {
@@ -113,30 +144,7 @@ private:
         }
 
     private:
-        BleManager* manager;
-    };
-
-    class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
-    public:
-        CharacteristicCallbacks(BleManager* manager) : manager(manager) {}
-
-        void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
-            uint16_t conn_handle = desc->conn_handle;
-            if (!manager->sessions.count(conn_handle)) return;
-            DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
-            manager->sessions[conn_handle]->chunker.consumeChunk(
-                pCharacteristic->getValue(), pCharacteristic->getDataLength());
-        }
-
-        void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
-            uint16_t conn_handle = desc->conn_handle;
-            if (!manager->sessions.count(conn_handle)) return;
-            //DEBUG("BLE: Reading from characteristic, conn_handle {}", conn_handle);
-            pCharacteristic->setValue(manager->sessions[conn_handle]->chunker.getResponseChunk());
-        }
-
-    private:
-        BleManager* manager;
+        BleManager& manager;
     };
 };
 
