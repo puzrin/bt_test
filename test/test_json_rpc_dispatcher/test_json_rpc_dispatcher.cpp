@@ -1,6 +1,16 @@
 #include <gtest/gtest.h>
 #include "json_rpc_dispatcher.hpp"
 
+// Helpers
+std::vector<uint8_t> s2v(const std::string& str) {
+    return std::vector<uint8_t>(str.begin(), str.end());
+}
+
+std::string v2s(const std::vector<uint8_t>& vec) {
+    return std::string(vec.begin(), vec.end());
+}
+
+
 // Example functions for testing
 int8_t add_8bits(int8_t a, int8_t b) { return a + b; }
 std::string concat(std::string a, std::string b) { return a + b; }
@@ -25,6 +35,18 @@ TEST(JsonRpcDispatcherTest, TestStringData) {
     std::string result = dispatcher.dispatch(input);
 
     EXPECT_EQ(expected, result);
+}
+
+TEST(JsonRpcDispatcherTest, TestVectorsInOut) {
+    JsonRpcDispatcher dispatcher;
+    dispatcher.addMethod("concat", concat);
+
+    std::string input = R"({"method": "concat", "args": ["hello ", "world"]})";
+    std::string expected = R"({"ok":true,"result":"hello world"})";
+    std::vector<uint8_t> result;
+    dispatcher.dispatch(s2v(input), result);
+
+    EXPECT_EQ(expected, v2s(result));
 }
 
 TEST(JsonRpcDispatcherTest, TestUnknownMethod) {

@@ -60,11 +60,11 @@ private:
                 size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
                 DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
 
-                std::string request(message.begin(), message.end());
-                std::string response = manager->rpc.dispatch(request);
-                std::vector<uint8_t> responseMessage(response.begin(), response.end());
                 DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
-                return responseMessage;
+
+                std::vector<uint8_t> response;
+                manager->rpc.dispatch(message, response);
+                return response;
             };
         }
 

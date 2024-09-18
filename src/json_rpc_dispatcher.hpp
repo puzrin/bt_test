@@ -38,6 +38,7 @@ int main() {
 #include <type_traits>
 #include <ArduinoJson.h>
 #include <cstdint>
+#include <vector>
 
 namespace jrcpd {
 
@@ -179,15 +180,32 @@ struct function_traits<Ret(ClassType::*)(Args...) const> {
     using argument_types = std::tuple<Args...>;
 };
 
-// Helper to generate JSON response
+// Helper to create response object
 template<typename T>
-std::string generate_response(bool status, const T& result) {
+const JsonDocument create_response(bool status, const T& result) {
     JsonDocument doc;
     doc["ok"] = status;
     doc["result"] = result;
-    std::string output;
+    return doc;
+}
+
+void serialize_to(const JsonDocument& doc, std::string& output) {
     serializeJson(doc, output);
-    return output;
+}
+
+void serialize_to(const JsonDocument& doc, std::vector<uint8_t>& output) {
+    size_t size = measureJson(doc);
+    output.resize(size);
+    serializeJson(doc, output.data(), size);
+    //serializeJson(doc, output);
+}
+
+DeserializationError deserialize_from(const std::string& input, JsonDocument& doc) {
+    return deserializeJson(doc, input);
+}
+
+DeserializationError deserialize_from(const std::vector<uint8_t>& input, JsonDocument& doc) {
+    return deserializeJson(doc, input.data(), input.size());
 }
 
 // Helper struct to check argument types
@@ -222,7 +240,7 @@ public:
         static_assert(jrcpd::is_supported_type<Ret>::value, "Return type is not allowed");
         static_assert(jrcpd::check_all_types_supported<ArgsTuple>(), "Argument type is not allowed");
 
-        functions[name] = [func](const JsonArray& args) -> std::string {
+        functions[name] = [func](const JsonArray& args) -> JsonDocument {
             try {
                 if (args.size() != std::tuple_size<ArgsTuple>::value) {
                     throw std::runtime_error("Number of arguments mismatch");
@@ -235,18 +253,28 @@ public:
 
                 auto tpl_args = jrcpd::from_json<ArgsTuple>(args);
                 Ret result = jrcpd::apply(func, tpl_args);
-                return jrcpd::generate_response(true, result);
+                return jrcpd::create_response(true, result);
             } catch (const std::exception& e) {
-                return jrcpd::generate_response(false, e.what());
+                return jrcpd::create_response(false, e.what());
             }
         };
     }
 
     std::string dispatch(const std::string& input) {
+        std::string output;
+        dispatch(input, output);
+        return output;
+    }
+
+    template<typename T_IN, typename T_OUT>
+    void dispatch(const T_IN& input, T_OUT& output) {
+        using namespace jrcpd;
+
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, input);
+        auto error = deserialize_from(input, doc);
         if (error) {
-            return jrcpd::generate_response(false, error.c_str());
+            serialize_to(create_response(false, error.c_str()), output);
+            return;
         }
 
         std::string method = doc["method"].as<std::string>();
@@ -254,13 +282,14 @@ public:
 
         auto it = functions.find(method);
         if (it != functions.end()) {
-            std::string result = it->second(args);
-            return result;
+            serialize_to(it->second(args), output);
+            return;
         } else {
-            return jrcpd::generate_response(false, "Method not found");
+            serialize_to(create_response(false, "Method not found"), output);
+            return;
         }
     }
 
 private:
-    std::unordered_map<std::string, std::function<std::string(const JsonArray&)>> functions;
+    std::unordered_map<std::string, std::function<JsonDocument(const JsonArray&)>> functions;
 };
