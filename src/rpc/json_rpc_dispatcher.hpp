@@ -189,22 +189,22 @@ const JsonDocument create_response(bool status, const T& result) {
     return doc;
 }
 
-void serialize_to(const JsonDocument& doc, std::string& output) {
+inline void serialize_to(const JsonDocument& doc, std::string& output) {
     serializeJson(doc, output);
 }
 
-void serialize_to(const JsonDocument& doc, std::vector<uint8_t>& output) {
+inline void serialize_to(const JsonDocument& doc, std::vector<uint8_t>& output) {
     size_t size = measureJson(doc);
     output.resize(size);
     serializeJson(doc, output.data(), size);
     //serializeJson(doc, output);
 }
 
-DeserializationError deserialize_from(const std::string& input, JsonDocument& doc) {
+inline DeserializationError deserialize_from(const std::string& input, JsonDocument& doc) {
     return deserializeJson(doc, input);
 }
 
-DeserializationError deserialize_from(const std::vector<uint8_t>& input, JsonDocument& doc) {
+inline DeserializationError deserialize_from(const std::vector<uint8_t>& input, JsonDocument& doc) {
     return deserializeJson(doc, input.data(), input.size());
 }
 
