@@ -1,171 +1,108 @@
 #include <array>
 #include <algorithm>
-#include <Arduino.h>
-#include <Preferences.h>
-#include <atomic>
+#include "async_preference/async_preference.hpp"
 
 using BleAuthId = std::array<uint8_t, 16>;
 using BleAuthSecret = std::array<uint8_t, 32>;
 
 template<size_t MaxRecords = 4>
-class BleAuthStore {
+class BleAuthStore : public AsyncPreferenceTickable {
 public:
-    BleAuthStore() : initialized(false), clients{}, timestamps{},
-                     clientsVersion(0), lastAccepted_clientsVersion(0),
-                     timestampsVersion(0), lastAccepted_timestampsVersion(0) {}
+    BleAuthStore(IAsyncPreferenceKV& kv) :
+        clientsPref(kv, "ble_auth", "clients"), timestampsPref(kv, "ble_auth", "timestamps") {}
 
     struct Client {
         BleAuthId id{};
         BleAuthSecret secret{};
     };
 
-    bool has(const BleAuthId& client_id) const {
-        lazy_init();
-        return std::any_of(clients.begin(), clients.end(), [&client_id](const Client& client) {
-            return client.id == client_id;
-        });
+    bool has(const BleAuthId& client_id) {
+        return idxById(client_id) != -1;
     }
 
-    bool get_secret(const BleAuthId& client_id, BleAuthSecret& secret_out) const {
-        lazy_init();
-        auto it = std::find_if(clients.begin(), clients.end(), [&client_id](const Client& client) {
-            return client.id == client_id;
-        });
-        if (it == clients.end()) return false;
-        secret_out = it->secret;
+    bool get_secret(const BleAuthId& client_id, BleAuthSecret& secret_out) {
+        auto idx = idxById(client_id);
+        if (idx == -1) return false;
+
+        secret_out = clientsPref.get()[idx].secret;
         return true;
     }
 
     bool set_timestamp(const BleAuthId& client_id, uint32_t timestamp) {
-        lazy_init();
+        auto idx = idxById(client_id);
+        if (idx < 0) return false;
 
-        auto it = std::find_if(clients.begin(), clients.end(), [&client_id](const Client& client) {
-            return client.id == client_id;
-        });
-        if (it == clients.end()) return false;
+        auto& timestamps = timestampsPref.get();
 
-        auto index = std::distance(clients.begin(), it);
-        uint32_t current_ts = timestamps[index];
+        uint32_t current_ts = timestamps[idx];
         constexpr uint32_t one_day_ms = 24 * 60 * 60 * 1000;
 
         if (timestamp == 0 || timestamp > current_ts + one_day_ms || current_ts > timestamp) {
-            // Mark transaction "in progress"
-            timestampsVersion.fetch_add(1, std::memory_order_acquire);
+            timestampsPref.valueUpdateBegin();
 
             // Update timestamp
-            timestamps[index] = timestamp;
+            timestamps[idx] = timestamp;
 
             // Align bad timestamps if any
             for (size_t i = 0; i < MaxRecords; i++) {
-                if (i != index && timestamps[i] != 0 && timestamps[i] > timestamp + one_day_ms) {
+                if (timestamps[i] != 0 && timestamps[i] > timestamp + one_day_ms) {
                     timestamps[i] = timestamp;
                 }
             }
 
-            // Commit new version
-            timestampsVersion.fetch_add(1, std::memory_order_release);
+            timestampsPref.valueUpdateEnd();
         }
 
         return true;
     }
 
     bool create(const BleAuthId& client_id, const BleAuthSecret& secret) {
-        lazy_init();
-        auto it = std::find_if(clients.begin(), clients.end(), [&client_id](const Client& client) {
-            return client.id == client_id;
-        });
+        auto idx = idxById(client_id);
+        if (idx < 0) idx = idxLRU();
 
-        if (it == clients.end()) {
-            auto min_it = std::min_element(timestamps.begin(), timestamps.end());
-            it = clients.begin() + std::distance(timestamps.begin(), min_it);
-        }
+        clientsPref.valueUpdateBegin();
+        timestampsPref.valueUpdateBegin();
 
-        clientsVersion.fetch_add(1, std::memory_order_acquire);
-        timestampsVersion.fetch_add(1, std::memory_order_acquire);
+        clientsPref.get()[idx] = { client_id, secret };
+        timestampsPref.get()[idx] = 0;
 
-        it->id = client_id;
-        it->secret = secret;
-        timestamps[std::distance(clients.begin(), it)] = 0;
+        clientsPref.valueUpdateEnd();
+        timestampsPref.valueUpdateEnd();
 
-        clientsVersion.fetch_add(1, std::memory_order_release);
-        timestampsVersion.fetch_add(1, std::memory_order_release);
         return true;
     }
 
+    void tick() override {
+        clientsPref.tick();
+        timestampsPref.tick();
+    }
+
 private:
-    bool initialized;
-    std::array<Client, MaxRecords> clients;
-    std::array<uint32_t, MaxRecords> timestamps;
+    AsyncPreference<std::array<Client, MaxRecords>> clientsPref;
+    AsyncPreference<std::array<uint32_t, MaxRecords>> timestampsPref;
 
-    std::atomic<uint32_t> clientsVersion;
-    uint32_t lastAccepted_clientsVersion;
-    std::atomic<uint32_t> timestampsVersion;
-    uint32_t lastAccepted_timestampsVersion;
+    int8_t idxById(const BleAuthId& client_id) {
+        if (isIdProhibited(client_id)) return -1;
 
-    Preferences prefs;
+        auto& clients = clientsPref.get();
 
-    void writer_tick() {
-        std::array<Client, MaxRecords> clients_copy;
-        std::array<uint32_t, MaxRecords> timestamps_copy;
+        auto it = std::find_if(clients.begin(), clients.end(), [&client_id](const Client& client) {
+            return client.id == client_id;
+        });
+        if (it == clients.end()) return -1;
 
-        const uint32_t clientsVersionBefore = clientsVersion.load(std::memory_order_acquire);
-        const uint32_t timestampsVersionBefore = timestampsVersion.load(std::memory_order_acquire);
-
-        const bool clients_updated = (lastAccepted_clientsVersion != clientsVersionBefore) &&
-                                     (clientsVersionBefore % 2 == 0);
-        const bool timestamps_updated = (lastAccepted_timestampsVersion != timestampsVersionBefore) &&
-                                        (timestampsVersionBefore % 2 == 0);
-
-        if (clients_updated) {
-            clients_copy = clients;
-
-            // Version should not change during data clone
-            if (clientsVersionBefore == clientsVersion.load(std::memory_order_acquire)) {
-                // Copy successful => save to storage
-                prefs.putBytes("clients", clients.data(), sizeof(clients));
-                lastAccepted_clientsVersion = clientsVersionBefore;
-            }
-        }
-
-        if (timestamps_updated) {
-            timestamps_copy = timestamps;
-
-            // Version should not change during data clone
-            if (timestampsVersionBefore == timestampsVersion.load(std::memory_order_acquire)) {
-                // Copy successful => save to storage
-                prefs.putBytes("timestamps", timestamps.data(), sizeof(timestamps));
-                lastAccepted_timestampsVersion = timestampsVersionBefore;
-            }
-        }
+        return std::distance(clients.begin(), it);
     }
 
-    void writer_thread(void* pvParameters) {
-        auto* self = static_cast<BleAuthStore<MaxRecords>*>(pvParameters);
-
-        while (true) {
-            vTaskDelay(pdMS_TO_TICKS(500));
-            self->writer_tick();
-        }
+    int8_t idxLRU() {
+        auto& timestamps = timestampsPref.get();
+        auto min_it = std::min_element(timestamps.begin(), timestamps.end());
+        return std::distance(timestamps.begin(), min_it);
     }
 
-    void lazy_init() {
-        if (!initialized) {
-            initialized = true;
-
-            prefs.begin("ble_auth", false);
-
-            //
-            // Load stored data to memory
-            //
-
-            size_t len = sizeof(clients);
-            prefs.getBytes("clients", clients.data(), len);
-
-            len = sizeof(timestamps);
-            prefs.getBytes("timestamps", timestamps.data(), len);
-
-            // Create writer
-            xTaskCreate(writer_thread, "ble_auth_writer", 1024 * 4, this, 1, NULL);
-        }
+    bool isIdProhibited(const BleAuthId& client_id) const {
+        return std::all_of(client_id.begin(), client_id.end(), [](auto val) {
+            return val == 0;
+        });
     }
 };

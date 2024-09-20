@@ -1,9 +1,11 @@
-#include "rpc.hpp"
-#include "ble_chunker.hpp"
-#include "logger.hpp"
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <map>
+#include "logger.hpp"
+#include "rpc.hpp"
+#include "ble_chunker.hpp"
+#include "async_preference/prefs.hpp"
+#include "ble_auth_store.hpp"
 
 JsonRpcDispatcher rpc;
 
@@ -13,10 +15,12 @@ namespace {
 const char* SERVICE_UUID = "5f524546-4c4f-575f-5250-435f5356435f"; // _REFLOW_RPC_SVC_
 const char* CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f494f5f5f"; // _REFLOW_RPC_IO__
 
-std::string deviceName = "Reflow Table";
 NimBLEServer* server = nullptr;
 NimBLEService* service = nullptr;
 NimBLECharacteristic* characteristic = nullptr;
+
+auto bleAuthStore = BleAuthStore<4>(prefsKV);
+auto bleNameStore = AsyncPreference<std::string>(prefsKV, "settings", "ble_name", "Reflow Table");
 
 class Session {
 public:
@@ -88,7 +92,10 @@ public:
 
 
 void ble_init() {
-    const std::string name = deviceName.substr(0, 20); // Limit name length
+    prefsWriter.add(bleAuthStore);
+    prefsWriter.add(bleNameStore);
+
+    const std::string name = bleNameStore.get().substr(0, 20); // Limit name length
     NimBLEDevice::init(name);
     NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
