@@ -8,16 +8,14 @@
 #include "ble_auth_store.hpp"
 
 JsonRpcDispatcher rpc;
+JsonRpcDispatcher auth_rpc;
 
 namespace {
 
 // UUIDs for the BLE service and characteristic
 const char* SERVICE_UUID = "5f524546-4c4f-575f-5250-435f5356435f"; // _REFLOW_RPC_SVC_
-const char* CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f494f5f5f"; // _REFLOW_RPC_IO__
-
-NimBLEServer* server = nullptr;
-NimBLEService* service = nullptr;
-NimBLECharacteristic* characteristic = nullptr;
+const char* RPC_CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f494f5f5f"; // _REFLOW_RPC_IO__
+const char* AUTH_CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f41555448"; // _REFLOW_RPC_AUTH
 
 auto bleAuthStore = BleAuthStore<4>(prefsKV);
 auto bleNameStore = AsyncPreference<std::string>(prefsKV, "settings", "ble_name", "Reflow Table");
@@ -25,8 +23,8 @@ auto bleNameStore = AsyncPreference<std::string>(prefsKV, "settings", "ble_name"
 class Session {
 public:
     Session()
-        : chunker(500, 16*1024 + 500) {
-        chunker.onMessage = [](const std::vector<uint8_t>& message) {
+        : rpcChunker(500, 16*1024 + 500), authChunker(500, 1*1024) {
+        rpcChunker.onMessage = [](const std::vector<uint8_t>& message) {
             size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
             size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
             DEBUG("Free memory: {} Minimum free memory: {}", uint32_t(freeMemory), uint32_t(minimumFreeMemory));
@@ -37,20 +35,27 @@ public:
             rpc.dispatch(message, response);
             return response;
         };
+
+        authChunker.onMessage = [](const std::vector<uint8_t>& message) {
+            std::vector<uint8_t> response;
+            auth_rpc.dispatch(message, response);
+            return response;
+        };
     }
 
-    BleChunker chunker;
+    BleChunker rpcChunker;
+    BleChunker authChunker;
 };
 
 std::map<uint16_t, Session*> sessions;
 
-class CharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+class RpcCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
 public:
     void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
         uint16_t conn_handle = desc->conn_handle;
         if (!sessions.count(conn_handle)) return;
         DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
-        sessions[conn_handle]->chunker.consumeChunk(
+        sessions[conn_handle]->rpcChunker.consumeChunk(
             pCharacteristic->getValue(), pCharacteristic->getDataLength());
     }
 
@@ -58,7 +63,24 @@ public:
         uint16_t conn_handle = desc->conn_handle;
         if (!sessions.count(conn_handle)) return;
         //DEBUG("BLE: Reading from characteristic, conn_handle {}", conn_handle);
-        pCharacteristic->setValue(sessions[conn_handle]->chunker.getResponseChunk());
+        pCharacteristic->setValue(sessions[conn_handle]->rpcChunker.getResponseChunk());
+    }
+};
+
+class AuthCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+public:
+    void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+        uint16_t conn_handle = desc->conn_handle;
+        if (!sessions.count(conn_handle)) return;
+        DEBUG("BLE AUTH: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+        sessions[conn_handle]->authChunker.consumeChunk(
+            pCharacteristic->getValue(), pCharacteristic->getDataLength());
+    }
+
+    void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
+        uint16_t conn_handle = desc->conn_handle;
+        if (!sessions.count(conn_handle)) return;
+        pCharacteristic->setValue(sessions[conn_handle]->authChunker.getResponseChunk());
     }
 };
 
@@ -100,19 +122,28 @@ void ble_init() {
     NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
 
-    server = NimBLEDevice::createServer();
+    NimBLEServer* server = NimBLEDevice::createServer();
     server->setCallbacks(new ServerCallbacks());
 
     // Setup RPC service and characteristic.
-    service = server->createService(SERVICE_UUID);
-    characteristic = service->createCharacteristic(
-        CHARACTERISTIC_UUID,
+    NimBLEService* service = server->createService(SERVICE_UUID);
+
+    NimBLECharacteristic* rpc_characteristic = service->createCharacteristic(
+        RPC_CHARACTERISTIC_UUID,
         // This hangs comm if enabled. Seems Web BT not supports encryption
         //NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC |
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE            
     );
+    rpc_characteristic->setCallbacks(new RpcCharacteristicCallbacks());
 
-    characteristic->setCallbacks(new CharacteristicCallbacks());
+    NimBLECharacteristic* auth_characteristic = service->createCharacteristic(
+        AUTH_CHARACTERISTIC_UUID,
+        // This hangs comm if enabled. Seems Web BT not supports encryption
+        //NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::WRITE_ENC |
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE            
+    );
+    auth_characteristic->setCallbacks(new AuthCharacteristicCallbacks());
+
     service->start();
 
     // Configure advertising
