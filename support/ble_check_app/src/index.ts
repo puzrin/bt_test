@@ -1,5 +1,3 @@
-import { BleConnector } from './BleConnector';
-import { BleClientChunker } from './BleClientChunker';
 import { BleRpcClient } from './BleRpcClient';
 
 if (!navigator.bluetooth) {
@@ -10,16 +8,15 @@ window.addEventListener('unhandledrejection', function(event) {
     console.error('Unhandled rejection:', event.reason);
 });
 
-const connector = new BleConnector();
-const chunker = new BleClientChunker(connector);
-const rpcClient = new BleRpcClient(chunker);
+const rpcClient = new BleRpcClient();
 
 document.getElementById('connectButton')?.addEventListener('click', async () => {
-    await connector.connect();
+    await rpcClient.connect();
 });
 
 document.getElementById('disconnectButton')?.addEventListener('click', async () => {
-    connector.disconnect();
+    //connector.disconnect();
+    alert('Not implemented');
 });
 
 document.getElementById('simpleCommandsButton')?.addEventListener('click', async () => {
