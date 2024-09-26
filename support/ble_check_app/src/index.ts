@@ -27,7 +27,7 @@ document.getElementById('simpleCommandsButton')?.addEventListener('click', async
 
         console.log(`Sum response: ${await rpcClient.invoke('sum', 4, 5)}`);
     } catch (error) {
-        console.error('RPC error:', error);
+        console.error(error);
     }
 });
 

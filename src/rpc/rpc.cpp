@@ -6,11 +6,27 @@
 #include "ble_chunker.hpp"
 #include "async_preference/prefs.hpp"
 #include "ble_auth_store.hpp"
+#include "auth_utils.hpp"
 
 JsonRpcDispatcher rpc;
 JsonRpcDispatcher auth_rpc;
 
 namespace {
+
+bool pairing_enabled_flag = false;
+uint32_t pairing_enabled_timestamp = 0;
+
+void pairing_enable(bool enable=true) {
+    pairing_enabled_flag = true;
+    pairing_enabled_timestamp = millis();
+}
+
+bool is_pairing_enabled() {
+    return true; // temporary stub
+
+    // Pairing is enabled for 30 seconds.
+    return pairing_enabled_flag && millis() - pairing_enabled_timestamp < 30 * 1000;
+}
 
 // UUIDs for the BLE service and characteristic
 const char* SERVICE_UUID = "5f524546-4c4f-575f-5250-435f5356435f"; // _REFLOW_RPC_SVC_
@@ -20,10 +36,16 @@ const char* AUTH_CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f41555448"; /
 auto bleAuthStore = BleAuthStore<4>(prefsKV);
 auto bleNameStore = AsyncPreference<std::string>(prefsKV, "settings", "ble_name", "Reflow Table");
 
+class Session;
+Session* context;
+void set_context(Session* ctx) { context = ctx; }
+Session* get_context() { return context; }
+
 class Session {
 public:
     Session()
-        : rpcChunker(500, 16*1024 + 500), authChunker(500, 1*1024) {
+        : rpcChunker(500, 16*1024 + 500), authChunker(500, 1*1024), authenticated(false)
+    {
         rpcChunker.onMessage = [](const std::vector<uint8_t>& message) {
             size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
             size_t minimumFreeMemory = heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT);
@@ -31,9 +53,16 @@ public:
 
             DEBUG("BLE: Received message of length {}", uint32_t(message.size()));
 
-            std::vector<uint8_t> response;
-            rpc.dispatch(message, response);
-            return response;
+            auto session = get_context();
+            if (session && session->authenticated) {
+                std::vector<uint8_t> response;
+                rpc.dispatch(message, response);
+                return response;
+            }
+            
+            const std::string error_json = R"({"ok": false, "result": "Not authenticated"})";
+            const std::vector<uint8_t> error(error_json.begin(), error_json.end());
+            return error;
         };
 
         authChunker.onMessage = [](const std::vector<uint8_t>& message) {
@@ -41,10 +70,15 @@ public:
             auth_rpc.dispatch(message, response);
             return response;
         };
+
+        // No default value allowed!
+        random = create_secret();
     }
 
     BleChunker rpcChunker;
     BleChunker authChunker;
+    bool authenticated;
+    std::array<uint8_t, 32> random;
 };
 
 std::map<uint16_t, Session*> sessions;
@@ -54,9 +88,11 @@ public:
     void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
         uint16_t conn_handle = desc->conn_handle;
         if (!sessions.count(conn_handle)) return;
-        DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
-        sessions[conn_handle]->rpcChunker.consumeChunk(
-            pCharacteristic->getValue(), pCharacteristic->getDataLength());
+        //DEBUG("BLE: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+
+        auto session = sessions[conn_handle];
+        set_context(session);
+        session->rpcChunker.consumeChunk(pCharacteristic->getValue(), pCharacteristic->getDataLength());
     }
 
     void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
@@ -72,9 +108,11 @@ public:
     void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
         uint16_t conn_handle = desc->conn_handle;
         if (!sessions.count(conn_handle)) return;
-        DEBUG("BLE AUTH: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
-        sessions[conn_handle]->authChunker.consumeChunk(
-            pCharacteristic->getValue(), pCharacteristic->getDataLength());
+        //DEBUG("BLE AUTH: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+
+        auto session = sessions[conn_handle];
+        set_context(session);
+        session->authChunker.consumeChunk(pCharacteristic->getValue(), pCharacteristic->getDataLength());
     }
 
     void onRead(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
@@ -89,7 +127,7 @@ public:
     void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
         uint16_t conn_handle = desc->conn_handle;
         sessions[conn_handle] = new Session();
-        DEBUG("BLE: Device connected, conn_handle {}, encryption: {}", conn_handle, uint8_t(desc->sec_state.encrypted));
+        DEBUG("BLE: Device connected, conn_handle {}", conn_handle);
 
         // Set the maximum data length the server will support
         // (!) Seems not actual, effects not visible
@@ -158,6 +196,63 @@ void ble_init() {
 
 }
 
+std::string auth_info() {
+    auto session = get_context();
+    
+    session->random = create_secret(); // renew hmac msg every time!
+
+    JsonDocument doc;
+    auto mac = get_own_mac();
+    doc["id"] = bin2hex(mac.data(), mac.size());
+    doc["hmac_msg"] = bin2hex(session->random.data(), session->random.size());
+    doc["pairable"] = is_pairing_enabled();
+
+    std::string output;
+    serializeJson(doc, output);
+    return output;
+}
+
+bool authenticate(const std::string str_client_id, const std::string str_hmac, uint64_t timestamp) {
+    auto session = get_context();
+
+    BleAuthId client_id;
+    hex2bin(str_client_id, client_id.data(), client_id.size());
+
+    std::array<uint8_t, 32> hmac_response;
+    hex2bin(str_hmac, hmac_response.data(), hmac_response.size());
+
+    auto random = session->random;
+    session->random = create_secret(); // renew hmac msg every time!
+
+    if (!bleAuthStore.has(client_id)) return false;
+
+    BleAuthSecret secret;
+    bleAuthStore.get_secret(client_id, secret);
+ 
+    auto hmac_expected = hmac_sha256(random, secret);
+    if (hmac_response != hmac_expected) return false;
+
+    session->authenticated = true;
+    bleAuthStore.set_timestamp(client_id, timestamp);
+    return true;
+}
+
+std::string pair(const std::string str_client_id) {
+    if (!is_pairing_enabled()) return "";
+
+    BleAuthId client_id;
+    hex2bin(str_client_id, client_id.data(), client_id.size());
+
+    auto secret = create_secret();
+    bleAuthStore.create(client_id, secret);
+
+    return bin2hex(secret.data(), secret.size());
+}
+
 void rpc_init() {
+    auth_rpc.addMethod("auth_info", auth_info);
+    auth_rpc.addMethod("authenticate", authenticate);
+    auth_rpc.addMethod("pair", pair);
+
     ble_init();
 }

@@ -28,14 +28,14 @@ public:
         return true;
     }
 
-    bool set_timestamp(const BleAuthId& client_id, uint32_t timestamp) {
+    bool set_timestamp(const BleAuthId& client_id, uint64_t timestamp) {
         auto idx = idxById(client_id);
         if (idx < 0) return false;
 
         auto& timestamps = timestampsPref.get();
 
-        uint32_t current_ts = timestamps[idx];
-        constexpr uint32_t one_day_ms = 24 * 60 * 60 * 1000;
+        uint64_t current_ts = timestamps[idx];
+        constexpr uint64_t one_day_ms = 24 * 60 * 60 * 1000;
 
         if (timestamp == 0 || timestamp > current_ts + one_day_ms || current_ts > timestamp) {
             timestampsPref.valueUpdateBegin();
@@ -79,7 +79,7 @@ public:
 
 private:
     AsyncPreference<std::array<Client, MaxRecords>> clientsPref;
-    AsyncPreference<std::array<uint32_t, MaxRecords>> timestampsPref;
+    AsyncPreference<std::array<uint64_t, MaxRecords>> timestampsPref;
 
     int8_t idxById(const BleAuthId& client_id) {
         if (isIdProhibited(client_id)) return -1;

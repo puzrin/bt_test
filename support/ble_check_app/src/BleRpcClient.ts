@@ -1,8 +1,22 @@
 import { BleClientChunker, BinaryTransport, IO } from './BleClientChunker';
 import { RpcCaller } from './RpcCaller';
+import { AuthStorage } from './AuthStorage';
 
 type RpcArgument = boolean | number | string;
 type RpcResult = boolean | number | string;
+
+interface AuthInfo {
+    id: string;
+    hmac_msg: string;
+    pairable: boolean;
+}
+  
+class NotPairedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'NotPairedError';
+    }
+}
 
 export class BleRpcClient {
     private device: BluetoothDevice | null = null;
@@ -13,6 +27,8 @@ export class BleRpcClient {
 
     private rpcCaller: RpcCaller;
     private authCaller: RpcCaller;
+
+    private authStorage = new AuthStorage();
 
     private isConnectedFlag = false;
     private isAuthenticatedFlag = false;
@@ -139,9 +155,47 @@ export class BleRpcClient {
     /**
      * Performs authentication with the device.
      */
-    private async authenticate(): Promise<void> {
+    private async authenticate(recursive_cnt = 0): Promise<void> {
         try {
-            // For now, always return success
+            const auth_info : AuthInfo = JSON.parse(await this.authCaller.invoke('auth_info') as string);
+
+            const device_id = auth_info.id;
+            const client_id = this.authStorage.getClientId();
+            const secret = this.authStorage.getSecret(device_id);
+
+            if (!secret) {
+                if (recursive_cnt > 1) throw new Error('Failed to pair with device.');
+
+                if (!auth_info.pairable) {
+                    throw new NotPairedError('Enable pairing mode on device and repeat connection!');
+                }
+
+                console.log('Pairing...');
+
+                const new_secret  = await this.authCaller.invoke('pair', client_id) as string;
+                this.authStorage.setSecret(device_id, new_secret);
+
+                console.log('Retry authentication...');
+
+                return await this.authenticate(++recursive_cnt);
+            }
+
+            console.log('Authenticating...');
+
+            const signature = await this.authStorage.calculateHMAC(auth_info.hmac_msg, secret);            
+            const authenticated = await this.authCaller.invoke('authenticate', client_id, signature, Date.now()) as boolean;
+
+            if (!authenticated) {
+                if (recursive_cnt > 1) throw new Error('Failed to pair with device.');
+
+                // Wrong key. Clear and retry.
+                console.log('Authentication failed. Clearing secret and retrying...');
+
+                this.authStorage.setSecret(device_id, '');
+                return await this.authenticate(++recursive_cnt);
+            }
+
+            console.log('Ready!');
             this.isAuthenticatedFlag = true;
         } catch (error) {
             this.isAuthenticatedFlag = false;

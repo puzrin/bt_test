@@ -21,7 +21,7 @@ class AsyncPreferenceKV : public IAsyncPreferenceKV {
 
     size_t length(const std::string& ns, const std::string& key) override {
         prefs.begin(ns.c_str(), true);
-        size_t len = prefs.getBytesLength(key.c_str());
+        size_t len = prefs.isKey(key.c_str()) ? prefs.getBytesLength(key.c_str()) : 0;
         prefs.end();
         return len;
     }
