@@ -57,12 +57,12 @@ TEST(BleAuthStoreTest, UpdateTimestamps) {
     store.create(default_client_id, default_secret);
 
     // Set initial timestamp
-    uint32_t timestamp = 1625152800;  // Some arbitrary timestamp
+    uint64_t timestamp = 1625152800;  // Some arbitrary timestamp
     EXPECT_TRUE(store.set_timestamp(default_client_id, timestamp));
     store.tick(); // Trigger snapshot
 
     // Test that timestamp was set correctly
-    AsyncPreference<std::array<uint32_t, 4>> timestampsPref(kv, "ble_auth", "timestamps");
+    AsyncPreference<std::array<uint64_t, 4>> timestampsPref(kv, "ble_auth", "timestamps");
     EXPECT_EQ(timestampsPref.get()[0], timestamp);
 }
 

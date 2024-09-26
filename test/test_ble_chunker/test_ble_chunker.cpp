@@ -18,7 +18,7 @@ protected:
     }
 
     virtual void SetUp() override {
-        chunker = new BleChunker(512);
+        chunker = new BleChunker();
 
         chunker->onMessage = [this](const std::vector<uint8_t>& message) { return onMessageHandler(message); };
 
@@ -59,7 +59,7 @@ TEST_F(BleChunkerTest, ChunkAssembly) {
 
 TEST_F(BleChunkerTest, MessageSizeOverflow) {
     // Create a BleChunker instance with a small maxMessageSize (e.g., 100 bytes)
-    BleChunker smallMessageChunker(512, 100);  // maxChunkSize = 512, maxMessageSize = 100
+    BleChunker smallMessageChunker(100);
 
     std::vector<uint8_t> chunk1 = createChunk(1, 0, 0, std::vector<uint8_t>(50, 0));  // 50 bytes of data
     smallMessageChunker.consumeChunk(chunk1);

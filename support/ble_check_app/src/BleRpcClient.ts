@@ -1,4 +1,4 @@
-import { BleClientChunker, BinaryTransport, IO } from './BleClientChunker';
+import { BleClientChunker, isLastChunk, IO } from './BleClientChunker';
 import { RpcCaller } from './RpcCaller';
 import { AuthStorage } from './AuthStorage';
 
@@ -265,7 +265,13 @@ class BleCharacteristicIO implements IO {
         if (!this.characteristic) {
             throw new Error('DisconnectedError: No characteristic available for writing');
         }
-        await this.characteristic.writeValueWithoutResponse(data);
+        if (isLastChunk(data)) {
+            // Last chunk delivery is guaranteed.
+            await this.characteristic.writeValueWithResponse(data);
+        } else {
+            // Intermediate chunk delivery is best-effort.
+            await this.characteristic.writeValueWithoutResponse(data);
+        }
     }
 
     async read(): Promise<Uint8Array> {

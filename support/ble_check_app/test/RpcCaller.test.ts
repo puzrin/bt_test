@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'assert';
-import { BleRpcClient } from '../src/BleRpcClient';
+import { RpcCaller } from '../src/RpcCaller';
 import { BinaryTransport } from '../src/BleClientChunker';
 
 function s2bin(str: string): Uint8Array {
@@ -29,20 +29,20 @@ class MockTransport implements BinaryTransport {
     }
 }
 
-test('BleRpcClient should correctly send a request and receive a successful response', async () => {
+test('RpcCaller should correctly send a request and receive a successful response', async () => {
     const mockResponse = s2bin('{ "ok": true, "result": 42 }');
     const transport = new MockTransport([mockResponse]);
-    const rpcClient = new BleRpcClient(transport);
+    const rpcClient = new RpcCaller(transport);
 
     const result = await rpcClient.invoke('someMethod', 1, 2, 3);
 
     assert.strictEqual(result, 42);
 });
 
-test('BleRpcClient should throw an error when the response contains an error', async () => {
+test('RpcCaller should throw an error when the response contains an error', async () => {
     const mockResponse = s2bin('{ "ok": false, "result": "Error message" }');
     const transport = new MockTransport([mockResponse]);
-    const rpcClient = new BleRpcClient(transport);
+    const rpcClient = new RpcCaller(transport);
 
     await assert.rejects(
         async () => {
@@ -52,10 +52,10 @@ test('BleRpcClient should throw an error when the response contains an error', a
     );
 });
 
-test('BleRpcClient should correctly handle different argument types', async () => {
+test('RpcCaller should correctly handle different argument types', async () => {
     const mockResponse = s2bin('{ "ok": true, "result": "success" }');
     const transport = new MockTransport([mockResponse]);
-    const rpcClient = new BleRpcClient(transport);
+    const rpcClient = new RpcCaller(transport);
 
     const result = await rpcClient.invoke('anotherMethod', true, 123, 'test');
 
@@ -67,10 +67,10 @@ test('BleRpcClient should correctly handle different argument types', async () =
     assert.deepStrictEqual(writes[0], s2bin('{"method":"anotherMethod","args":[true,123,"test"]}'));
 });
 
-test('BleRpcClient should handle empty argument list', async () => {
+test('RpcCaller should handle empty argument list', async () => {
     const mockResponse = s2bin('{ "ok": true, "result": "empty" }');
     const transport = new MockTransport([mockResponse]);
-    const rpcClient = new BleRpcClient(transport);
+    const rpcClient = new RpcCaller(transport);
 
     const result = await rpcClient.invoke('methodWithoutArgs');
 
@@ -82,10 +82,10 @@ test('BleRpcClient should handle empty argument list', async () => {
     assert.deepStrictEqual(writes[0], s2bin('{"method":"methodWithoutArgs","args":[]}'));
 });
 
-test('BleRpcClient should handle unicode characters correctly', async () => {
+test('RpcCaller should handle unicode characters correctly', async () => {
     const mockResponse = s2bin('{ "ok": true, "result": "успех" }');
     const transport = new MockTransport([mockResponse]);
-    const rpcClient = new BleRpcClient(transport);
+    const rpcClient = new RpcCaller(transport);
 
     const result = await rpcClient.invoke('unicodeMethod', 'тест');
 

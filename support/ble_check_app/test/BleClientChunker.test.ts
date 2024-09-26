@@ -68,7 +68,7 @@ test('BleClientChunker should throw error on size overflow', async () => {
 
     await assert.rejects(async () => {
         await chunker.send(bin(1, 2, 3, 4));
-    }, /Protocol error: chunk size overflow/);
+    }, /Protocol error: size overflow/);
 });
 
 test('MockIO should throw an error when no more data to read', async () => {

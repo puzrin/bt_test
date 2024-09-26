@@ -45,9 +45,8 @@ public:
 
 class BleChunker {
 public:
-    // Max BLE MTU size usually 512 or 517 bytes. Set default transfer size a bit less.
-    BleChunker(size_t maxChunkSize = 500, size_t maxMessageSize = 65536)
-            : maxChunkSize(maxChunkSize), maxMessageSize(maxMessageSize),
+    BleChunker(size_t maxMessageSize = 65536)
+            : maxMessageSize(maxMessageSize),
             messageSize(0), expectedSequenceNumber(0), firstMessage(true), skipTail(false) {
         assembledMessage.reserve(maxMessageSize);
     }
@@ -127,7 +126,12 @@ public:
     std::vector<std::vector<uint8_t>> response;  // Store response chunks here
 
 private:
-    size_t maxChunkSize;
+    // Max DLE data size is 251 bytes. Every R/W to characteristic should be
+    // 244 or 495 bytes to fit into 1 or 2 DLE packets (including overheads).
+    // That maximizes speed on bulk transfers.
+    // In real world, 495 bytes do not give any notable benefits. So, use 244 bytes.
+    static constexpr size_t MAX_CHUNK_SIZE = 244;
+
     size_t maxMessageSize;
     uint8_t currentMessageId;
     size_t messageSize;
@@ -148,7 +152,7 @@ private:
     std::vector<std::vector<uint8_t>> splitMessageToChunks(const std::vector<uint8_t>& message) {
         std::vector<std::vector<uint8_t>> chunks;
         size_t totalSize = message.size();
-        size_t chunkSize = maxChunkSize - BleChunkHead::SIZE;
+        size_t chunkSize = MAX_CHUNK_SIZE - BleChunkHead::SIZE;
 
         if (totalSize == 0) {
             // Handle case when message is empty, send only the header with FINAL_CHUNK_FLAG

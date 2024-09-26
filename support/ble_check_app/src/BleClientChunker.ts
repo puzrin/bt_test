@@ -51,13 +51,17 @@ export function mergeUint8Arrays(arrays: Uint8Array[]): Uint8Array {
 
 export class BleClientChunker implements BinaryTransport {
     private io: IO;
-    private maxBlobSize: number;
     private messageIdCounter: number;
     private queue: Promise<BleMessage>;
 
-    constructor(io: IO, maxBlobSize = 500) {
+    // Max DLE data size is 251 bytes. Every R/W to characteristic should be
+    // 244 or 495 bytes to fit into 1 or 2 DLE packets (including overheads).
+    // That maximizes speed on bulk transfers.
+    // In real world, 495 bytes do not give any notable benefits. So, use 244 bytes.
+    private static readonly MAX_BLOB_SIZE = 244;
+
+    constructor(io: IO) {
         this.io = io;
-        this.maxBlobSize = maxBlobSize;
         this.messageIdCounter = 0;
         this.queue = Promise.resolve(new Uint8Array(0));  // Initialize the queue with a resolved promise
     }
@@ -65,7 +69,7 @@ export class BleClientChunker implements BinaryTransport {
     private splitIntoChunks(message: BleMessage): BleChunk[] {
         const chunks: BleChunk[] = [];
         const totalSize = message.length;
-        const chunkSize = this.maxBlobSize - 4;
+        const chunkSize = BleClientChunker.MAX_BLOB_SIZE - 4;
 
         // Increment the messageId counter, wrapping around at 255
         this.messageIdCounter = (this.messageIdCounter + 1) & 0xff;

@@ -44,7 +44,7 @@ Session* get_context() { return context; }
 class Session {
 public:
     Session()
-        : rpcChunker(500, 16*1024 + 500), authChunker(500, 1*1024), authenticated(false)
+        : rpcChunker(16*1024 + 500), authChunker(1*1024), authenticated(false)
     {
         rpcChunker.onMessage = [](const std::vector<uint8_t>& message) {
             size_t freeMemory = heap_caps_get_free_size(MALLOC_CAP_8BIT);
@@ -108,7 +108,10 @@ public:
     void onWrite(NimBLECharacteristic* pCharacteristic, ble_gap_conn_desc* desc) override {
         uint16_t conn_handle = desc->conn_handle;
         if (!sessions.count(conn_handle)) return;
-        //DEBUG("BLE AUTH: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+        DEBUG("BLE AUTH: Received chunk of length {}", uint32_t(pCharacteristic->getDataLength()));
+        const auto& sec = desc->sec_state;
+        DEBUG("BLE AUTH security state: encrypted {}, authenticated {}, bonded {}",
+            (uint8_t)sec.encrypted, (uint8_t)sec.authenticated, (uint8_t)sec.bonded);
 
         auto session = sessions[conn_handle];
         set_context(session);
@@ -129,12 +132,14 @@ public:
         sessions[conn_handle] = new Session();
         DEBUG("BLE: Device connected, conn_handle {}", conn_handle);
 
-        // Set the maximum data length the server will support
-        // (!) Seems not actual, effects not visible
+        // For BLE 5 clients with DLE extension support - set data packet size to max.
+        // This boosts transfer speed to ~ 45 Kb/sec for big transfers.
         pServer->setDataLen(conn_handle, 251);
 
         // Update connection parameters for maximum performance and stability
         // min conn interval 7.5ms, max conn interval 7.5ms, latency 0, timeout 2s
+        // Smaller intervals help with BLE 4 clients without DLE, but makes no sense
+        // for BLE 5 clients with DLE.
         pServer->updateConnParams(conn_handle, 0x06, 0x06, 0, 200);
     }
 
@@ -148,6 +153,13 @@ public:
     void onMTUChange(uint16_t mtu, ble_gap_conn_desc* desc) override {
         DEBUG("BLE: MTU updated to {}, conn_handle {}", mtu, desc->conn_handle);
     }
+
+    // Used for testing purposes, to check if encryption is working
+    void onAuthenticationComplete(ble_gap_conn_desc* desc) override {
+        const auto& sec = desc->sec_state;
+        DEBUG("BLE: Authentication complete, conn_handle {}, encrypted {}, authenticated {}, bonded {}",
+            desc->conn_handle, (uint8_t)sec.encrypted, (uint8_t)sec.authenticated, (uint8_t)sec.bonded);
+    }
 };
 
 
@@ -157,8 +169,27 @@ void ble_init() {
 
     const std::string name = bleNameStore.get().substr(0, 20); // Limit name length
     NimBLEDevice::init(name);
-    NimBLEDevice::setMTU(517); // Set the maximum MTU size the server will support
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // Set the power level to maximum
+    // By default NimBLE already set MTU tu 255. No need to tune it manually.
+    // That's enough for 244 bytes read/write to long characteristics.
+    // 244 bytes "chunk" - optimal to fit into 1 DLE data packet (251 bytes max).
+    // This minimizes overheads and maximizes speed. Alternate value is 495 bytes,
+    // (2 DLE data packets) but it gives no notable benefits in real world.
+    //
+    // NimBLEDevice::setMTU(255);
+
+    // Configure "Just Works" encryption. Notes:
+    //
+    // 1. Unfortunately, this seems to works only when device attached via
+    //    OS "control panel". Web Bluetooth on linux sucks :(.
+    // 2. If bonding set to mandatory, browser can't connect until device bonded
+    //    via control panel. Since that's not user-friendly, we allow anyone
+    //    to connect, and use hand-crafted HMAC-based authentication.
+    //
+    // So, encryption is not actually used, but exists for memory. May be this
+    // will be useful in future.
+    NimBLEDevice::setSecurityAuth(false, false, true);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
 
     NimBLEServer* server = NimBLEDevice::createServer();
     server->setCallbacks(new ServerCallbacks());
