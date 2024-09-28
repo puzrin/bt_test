@@ -16,18 +16,6 @@ namespace {
 bool pairing_enabled_flag = false;
 uint32_t pairing_enabled_timestamp = 0;
 
-void pairing_enable(bool enable=true) {
-    pairing_enabled_flag = true;
-    pairing_enabled_timestamp = millis();
-}
-
-bool is_pairing_enabled() {
-    return true; // temporary stub
-
-    // Pairing is enabled for 30 seconds.
-    return pairing_enabled_flag && millis() - pairing_enabled_timestamp < 30 * 1000;
-}
-
 // UUIDs for the BLE service and characteristic
 const char* SERVICE_UUID = "5f524546-4c4f-575f-5250-435f5356435f"; // _REFLOW_RPC_SVC_
 const char* RPC_CHARACTERISTIC_UUID = "5f524546-4c4f-575f-5250-435f494f5f5f"; // _REFLOW_RPC_IO__
@@ -278,6 +266,22 @@ std::string pair(const std::string str_client_id) {
     bleAuthStore.create(client_id, secret);
 
     return bin2hex(secret.data(), secret.size());
+}
+
+void pairing_enable() {
+    pairing_enabled_flag = true;
+    pairing_enabled_timestamp = millis();
+}
+
+void pairing_disable() {
+    pairing_enabled_flag = false;
+}
+
+bool is_pairing_enabled() {
+    return true; // temporary stub
+
+    // Pairing is enabled for 30 seconds.
+    return pairing_enabled_flag && millis() - pairing_enabled_timestamp < 30 * 1000;
 }
 
 void rpc_init() {

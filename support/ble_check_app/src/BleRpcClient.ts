@@ -22,11 +22,11 @@ export class BleRpcClient {
     private device: BluetoothDevice | null = null;
     private gattServer: BluetoothRemoteGATTServer | null = null;
 
-    private rpcIO: BleCharacteristicIO;
-    private authIO: BleCharacteristicIO;
+    private rpcIO = new BleCharacteristicIO();
+    private authIO = new BleCharacteristicIO();
 
-    private rpcCaller: RpcCaller;
-    private authCaller: RpcCaller;
+    private rpcCaller = new RpcCaller(new BleClientChunker(this.rpcIO));
+    private authCaller = new RpcCaller(new BleClientChunker(this.authIO));
 
     private authStorage = new AuthStorage();
 
@@ -38,28 +38,22 @@ export class BleRpcClient {
     private maxReconnectAttempts = 5;
     private reconnectInterval = 5000; // in milliseconds
 
-    private boundedDisconnectHandler: () => void;
+    private boundedDisconnectHandler = this.handleDisconnection.bind(this);
 
     // UUIDs
     private static readonly SERVICE_UUID = '5f524546-4c4f-575f-5250-435f5356435f'; // _REFLOW_RPC_SVC_
     private static readonly RPC_CHARACTERISTIC_UUID = '5f524546-4c4f-575f-5250-435f494f5f5f'; // _REFLOW_RPC_IO__
     private static readonly AUTH_CHARACTERISTIC_UUID = '5f524546-4c4f-575f-5250-435f41555448'; // _REFLOW_RPC_AUTH
 
-    constructor() {
-        // Initialize IO objects without characteristics
-        this.rpcIO = new BleCharacteristicIO();
-        this.authIO = new BleCharacteristicIO();
+    public async getDevice(once = false) {
+        if (once && this.device) {
+            console.log('Device already found.', this.device);
+            return this.device;
+        }
 
-        // Initialize BleClientChunkers with the IO objects
-        const rpcChunker = new BleClientChunker(this.rpcIO);
-        const authChunker = new BleClientChunker(this.authIO);
-
-        // Initialize RpcCallers with the chunkers
-        this.rpcCaller = new RpcCaller(rpcChunker);
-        this.authCaller = new RpcCaller(authChunker);
-
-        // Bind disconnect handler
-        this.boundedDisconnectHandler = this.handleDisconnection.bind(this);
+        this.device = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [BleRpcClient.SERVICE_UUID] }],
+        });
     }
 
     /**
@@ -74,12 +68,7 @@ export class BleRpcClient {
                 return;
             }
 
-            // Request device if not previously connected
-            if (!this.device) {
-                this.device = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [BleRpcClient.SERVICE_UUID] }],
-                });
-            }
+            await this.getDevice(true)
             if (!this.device) throw new Error('No device found during scan.');
 
             console.log(`Connecting to GATT Server on ${this.device.name}...`);
@@ -91,8 +80,6 @@ export class BleRpcClient {
             this.isConnectedFlag = true;
 
             // Get primary service
-            console.log('Getting primary service...');
-
             const services = await this.gattServer.getPrimaryServices();
             if (services?.length !== 1) {
                 throw new Error(`Bad amount of services (${services.length}).`);
@@ -100,19 +87,15 @@ export class BleRpcClient {
             const service = services[0];
 
             // Get characteristics
-            console.log('Getting characteristic...');
-            
             let rpcCharacteristic = await service.getCharacteristic(BleRpcClient.RPC_CHARACTERISTIC_UUID)
             let authCharacteristic = await service.getCharacteristic(BleRpcClient.AUTH_CHARACTERISTIC_UUID)
             if (!rpcCharacteristic || !authCharacteristic) {
                 throw new Error('Failed to get characteristics.');
             }
 
-            // Attach characteristics in IO objects
             this.rpcIO.setCharacteristic(rpcCharacteristic);
             this.authIO.setCharacteristic(authCharacteristic);
 
-            // Perform authentication
             await this.authenticate();
 
             // Set up disconnect listener
@@ -126,24 +109,12 @@ export class BleRpcClient {
         }
     }
 
-    /**
-     * Checks if the device is connected.
-     */
     isConnected() { return this.isConnectedFlag && this.gattServer?.connected === true; }
 
-    /**
-     * Checks if the client is authenticated with the device.
-     */
     isAuthenticated() { return this.isAuthenticatedFlag; }
 
-    /**
-     * Checks if the device is ready for RPC communication.
-     */
     isReady() { return this.isConnected() && this.isAuthenticated(); }
 
-    /**
-     * Sends an RPC request to the device.
-     */
     async invoke(method: string, ...args: RpcArgument[]): Promise<RpcResult> {
         if (!this.isReady()) {
             throw new Error('DisconnectedError: Device is not ready');
@@ -152,9 +123,6 @@ export class BleRpcClient {
         return await this.rpcCaller.invoke(method, ...args);
     }
 
-    /**
-     * Performs authentication with the device.
-     */
     private async authenticate(recursive_cnt = 0): Promise<void> {
         try {
             const auth_info : AuthInfo = JSON.parse(await this.authCaller.invoke('auth_info') as string);
@@ -203,11 +171,8 @@ export class BleRpcClient {
         }
     }
 
-    /**
-     * Handles disconnection events and initiates reconnection attempts.
-     */
-    private async handleDisconnection(): Promise<void> {
-        console.log('Disconnected from GATT server.');
+    private async cleanup() {
+        this.device?.removeEventListener('gattserverdisconnected', this.boundedDisconnectHandler); // Ensure only one listener
 
         this.isConnectedFlag = false;
         this.isAuthenticatedFlag = false;
@@ -215,6 +180,10 @@ export class BleRpcClient {
         // Clear characteristics in IO objects
         this.rpcIO.setCharacteristic(null);
         this.authIO.setCharacteristic(null);
+    }
+
+    private async handleDisconnection(): Promise<void> {
+        console.log('Disconnected from GATT server.');
 
         if (this.isReconnecting) return;
 
@@ -239,9 +208,6 @@ export class BleRpcClient {
         }
     }
 
-    /**
-     * Utility function for delaying execution.
-     */
     private delay(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
