@@ -11,7 +11,11 @@ window.addEventListener('unhandledrejection', function(event) {
 const rpcClient = new BleRpcClient();
 
 document.getElementById('connectButton')?.addEventListener('click', async () => {
-    await rpcClient.connect();
+    try {
+        await rpcClient.selectDevice();
+    } catch (error) {
+        console.error(error);
+    }
 });
 
 document.getElementById('disconnectButton')?.addEventListener('click', async () => {
