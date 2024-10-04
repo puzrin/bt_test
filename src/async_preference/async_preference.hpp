@@ -5,6 +5,7 @@
 #include <atomic>
 #include <vector>
 #include <type_traits>
+#include "utils/data_guard.hpp"
 
 // Interface for key-value storage
 class IAsyncPreferenceKV {
@@ -103,17 +104,16 @@ template <typename T, typename Serializer = void>
 class AsyncPreference : public AsyncPreferenceTickable {
 public:
     AsyncPreference(IAsyncPreferenceKV& kv, const std::string& ns, const std::string& key, T initial = T()) :
-        value{initial}, snapshot{}, version(0), lastAccepted_version(0), has_snapshot(false),
-        kv{kv}, ns(ns), key(key), is_preloaded(false) {}
+        databox{initial}, kv{kv}, ns(ns), key(key), is_preloaded(false) {}
 
     T& get() {
         preload();
-        return value;
+        return databox.value;
     }
 
     void set(const T& value) {
         valueUpdateBegin();
-        this->value = value;
+        databox.value = value;
         valueUpdateEnd();
     }
 
@@ -125,60 +125,36 @@ public:
         // disable persistance restore.
         if (!is_preloaded) is_preloaded = true;
 
-        version.fetch_add(1, std::memory_order_acquire);
+        databox.beginWrite();
     }
-    void valueUpdateEnd() { version.fetch_add(1, std::memory_order_release); }
+    void valueUpdateEnd() { databox.endWrite(); }
 
     //
     // Those are for calling by AsyncPreferenceWriter from another thread,
     // to avoid freezes.
     //
     void tick() override {
-        makeSnapshot();
-        saveSnapshot();
-    }
-
-    void makeSnapshot() {
-        const uint32_t versionBefore = version.load(std::memory_order_acquire);
-
-        // If version is odd, it means that value is being updated right now.
-        if (lastAccepted_version != versionBefore && versionBefore % 2 == 0) {
-            snapshot = value;
-            // If version is still the same => snapshot is useable.
-            if (versionBefore == version.load(std::memory_order_acquire)) {
-                lastAccepted_version = versionBefore;
-                has_snapshot = true;
-            }
-        }
-    }
-
-    void saveSnapshot() {
         using namespace async_preference_ns;
 
-        if (!has_snapshot) return;
+        if (!databox.makeSnapshot()) return;
 
+        // Save snapshot to storage
         if constexpr (!std::is_void_v<Serializer>) {
             // If custom serializer is provided, use it
-            Serializer::save(kv, ns, key, snapshot);
+            Serializer::save(kv, ns, key, databox.snapshot);
         } else if constexpr (HasBufferTraits<T>::value) {
             // Use BufferSerializer if type has buffer-like traits
-            BufferSerializer<T>::save(kv, ns, key, snapshot);
+            BufferSerializer<T>::save(kv, ns, key, databox.snapshot);
         } else if constexpr (std::is_trivially_copyable_v<T>) {
             // Use TrivialSerializer for trivially copyable types
-            TrivialSerializer<T>::save(kv, ns, key, snapshot);
+            TrivialSerializer<T>::save(kv, ns, key, databox.snapshot);
         } else {
             static_assert(dependent_false<T>::value, "No suitable serializer found for this type");
         }
-
-        has_snapshot = false;
     }
 
 private:
-    T value;
-    T snapshot;
-    std::atomic<uint32_t> version;
-    uint32_t lastAccepted_version;
-    bool has_snapshot;
+    DataGuard<T> databox;
     IAsyncPreferenceKV& kv;
     std::string ns;
     std::string key;
@@ -195,13 +171,13 @@ private:
 
         if constexpr (!std::is_void_v<Serializer>) {
             // Use custom serializer if provided
-            Serializer::load(kv, ns, key, value);
+            Serializer::load(kv, ns, key, databox.value);
         } else if constexpr (HasBufferTraits<T>::value) {
             // Use BufferSerializer if type has buffer-like traits
-            BufferSerializer<T>::load(kv, ns, key, value);
+            BufferSerializer<T>::load(kv, ns, key, databox.value);
         } else if constexpr (std::is_trivially_copyable_v<T>) {
             // Use TrivialSerializer for trivially copyable types
-            TrivialSerializer<T>::load(kv, ns, key, value);
+            TrivialSerializer<T>::load(kv, ns, key, databox.value);
         } else {
             static_assert(dependent_false<T>::value, "No suitable serializer found for this type");
         }
