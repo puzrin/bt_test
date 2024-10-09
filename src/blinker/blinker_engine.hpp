@@ -80,14 +80,27 @@ public:
             : value{std::array<uint8_t, 1>{singleValue}}, period(period), isAnimated(isAnimated) {}
     };
 
-    BlinkerEngine() : driver(), sequenceQueue{}, prevTickTs(0), hasNewJob(false), working(false),
-        sequence{}, currentActionIdx(0), actionProgress(0), prevActionValue{} {}
+    BlinkerEngine() : driver(), sequenceQueue{}, backgroundQueue{}, prevTickTs(0), hasNewJob(false), working(false),
+        sequence{}, backgroundValue{}, currentActionIdx(0), actionProgress(0), prevActionValue{} {}
 
     void loop(const std::initializer_list<Action>& actions) { updateSequence(actions, true); }
 
     void once(const std::initializer_list<Action>& actions) { updateSequence(actions, false); }
 
-    static Action flowTo(typename Driver::DataType target, uint32_t duration) { return {target, duration, true}; }
+    void background(const typename Driver::DataType& value) {
+        const typename Driver::DataType val = std::move(value);
+        backgroundQueue.write(val);
+    }
+    // Sugar for single channel, to omit brackets
+    template<int Channels = Driver::ChannelsCount, typename = std::enable_if_t<Channels == 1>>
+    void background(const uint8_t value) {
+        typename Driver::DataType val = {value};
+        backgroundQueue.write(val);
+    }
+
+    void off() { once({ {backgroundValue, 0} }); }
+
+    static Action flowTo(const typename Driver::DataType target, uint32_t duration) { return {target, duration, true}; }
     // Sugar for single channel, to omit brackets
     template<int Channels = Driver::ChannelsCount, typename = std::enable_if_t<Channels == 1>>
     static Action flowTo(uint8_t target, uint32_t duration) { return {target, duration, true}; }
@@ -108,6 +121,8 @@ public:
             working = true;
             hasNewJob = false;
         }
+
+        if (backgroundQueue.read(backgroundValue) && !working) driver.set(backgroundValue);
 
         if (working) {
             const auto& action = sequence.actions[currentActionIdx];
@@ -138,6 +153,7 @@ public:
                     working = false;
                     // If looping, start over
                     if (sequence.looping) hasNewJob = true;
+                    else driver.set(backgroundValue);
                 }
             }
         }
@@ -161,12 +177,14 @@ private:
 
     Driver driver;
     BlinkerSimpleQueue<Sequence> sequenceQueue;
+    BlinkerSimpleQueue<typename Driver::DataType> backgroundQueue;
 
     // Ticker states
     uint32_t prevTickTs;
     bool hasNewJob;
     bool working;
     Sequence sequence;
+    typename Driver::DataType backgroundValue;
     uint8_t currentActionIdx;
     uint32_t actionProgress;
     typename Driver::DataType prevActionValue;
