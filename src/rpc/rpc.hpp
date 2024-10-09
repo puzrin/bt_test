@@ -8,4 +8,3 @@ void rpc_init();
 
 void pairing_enable();
 void pairing_disable();
-bool is_pairing_enabled();

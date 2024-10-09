@@ -26,10 +26,6 @@ document.getElementById('disconnectButton')?.addEventListener('click', async () 
 document.getElementById('simpleCommandsButton')?.addEventListener('click', async () => {
     try {
         console.log(`Echo response: ${await rpcClient.invoke('echo', 'Hello, BLE!')}`);
-
-        console.log(`Ping response: ${await rpcClient.invoke('ping')}`);
-
-        console.log(`Sum response: ${await rpcClient.invoke('sum', 4, 5)}`);
     } catch (error) {
         console.error(error);
     }

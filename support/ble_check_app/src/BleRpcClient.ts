@@ -163,7 +163,7 @@ export class BleRpcClient {
             throw new Error('Failed to get characteristics.');
         }
 
-        console.log('BLE connection and initialization complete');
+        console.log('BLE connected (but needs authentication to become ready)');
         return [rpcCharacteristic, authCharacteristic];
     }
 

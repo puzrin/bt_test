@@ -7,6 +7,7 @@
 #include "async_preference/prefs.hpp"
 #include "ble_auth_store.hpp"
 #include "auth_utils.hpp"
+#include "app.hpp"
 
 JsonRpcDispatcher rpc;
 JsonRpcDispatcher auth_rpc;
@@ -14,7 +15,8 @@ JsonRpcDispatcher auth_rpc;
 namespace {
 
 bool pairing_enabled_flag = false;
-uint32_t pairing_enabled_timestamp = 0;
+
+bool is_pairing_enabled() { return pairing_enabled_flag; }
 
 // UUIDs for the BLE service and characteristic
 const char* SERVICE_UUID = "5f524546-4c4f-575f-5250-435f5356435f"; // _REFLOW_RPC_SVC_
@@ -213,8 +215,6 @@ void ble_init() {
     DEBUG("BLE initialized");
 }
 
-}
-
 std::string auth_info() {
     auto session = get_context();
     
@@ -265,24 +265,16 @@ std::string pair(const std::string str_client_id) {
     auto secret = create_secret();
     bleAuthStore.create(client_id, secret);
 
+    // Exit pairing mode on success
+    app.receive(BondOff());
+
     return bin2hex(secret.data(), secret.size());
 }
 
-void pairing_enable() {
-    pairing_enabled_flag = true;
-    pairing_enabled_timestamp = millis();
 }
 
-void pairing_disable() {
-    pairing_enabled_flag = false;
-}
-
-bool is_pairing_enabled() {
-    return true; // temporary stub
-
-    // Pairing is enabled for 30 seconds.
-    return pairing_enabled_flag && millis() - pairing_enabled_timestamp < 30 * 1000;
-}
+void pairing_enable() { pairing_enabled_flag = true; }
+void pairing_disable() { pairing_enabled_flag = false; }
 
 void rpc_init() {
     auth_rpc.addMethod("auth_info", auth_info);
