@@ -6,25 +6,26 @@ class IButtonDriver {
     virtual bool get() = 0;
 };
 
+enum class ButtonEventId {
+    //BUTTON_SEQUENCE_START,
+    //BUTTON_SEQUENCE_END,
+    BUTTON_LONG_PRESS_START,
+    BUTTON_LONG_PRESS_FAIL,
+    BUTTON_LONG_PRESS,
+    BUTTON_PRESSED_1X,
+    BUTTON_PRESSED_2X,
+    BUTTON_PRESSED_3X,
+    BUTTON_PRESSED_4X,
+    BUTTON_PRESSED_5X
+};
+
 template <typename Driver>
 class ButtonEngine {
 public:
     ButtonEngine() : driver(), state(START), unfilteredBtn(false), btnPressed(false),
         unfilteredBtnTimestamp(0), btnToggleTimestamp(0), prevPeriod(0), currentPeriod(0) {}
 
-    enum Event {
-        BUTTON_SEQUENCE_START,
-        BUTTON_SEQUENCE_END,
-        BUTTON_LONG_PRESS_START,
-        BUTTON_LONG_PRESS,
-        BUTTON_PRESSED_1X,
-        BUTTON_PRESSED_2X,
-        BUTTON_PRESSED_3X,
-        BUTTON_PRESSED_4X,
-        BUTTON_PRESSED_5X
-    };
-
-    void setEventHandler(void (*handler)(Event)) { eventHandler = handler; }
+    void setEventHandler(void (*handler)(ButtonEventId)) { eventHandler = handler; }
 
     static constexpr uint32_t JITTER_THRESHOLD = 50;
     static constexpr uint32_t SHORT_PRESS_THRESHOLD = 500;
@@ -56,7 +57,7 @@ public:
         {
         case START:
             if (btnPressed) {
-                handleEvent(BUTTON_SEQUENCE_START);
+                //handleEvent(ButtonEventId::BUTTON_SEQUENCE_START);
                 state = CHECK_FIRST_PRESS;
                 return;
             }
@@ -65,7 +66,7 @@ public:
         case CHECK_FIRST_PRESS:
             if (btnPressed && currentPeriod >= SHORT_PRESS_THRESHOLD) {
                 state = WAIT_LONG_PRESS;
-                handleEvent(BUTTON_LONG_PRESS_START);
+                handleEvent(ButtonEventId::BUTTON_LONG_PRESS_START);
                 return;
             }
 
@@ -79,14 +80,15 @@ public:
         case WAIT_LONG_PRESS:
             if (btnPressed && currentPeriod > LONG_PRESS_THRESHOLD) {
                 state = WAIT_LONG_RELEASE;
-                handleEvent(BUTTON_LONG_PRESS);
+                handleEvent(ButtonEventId::BUTTON_LONG_PRESS);
                 return;
             }
 
             // Released too early => terminate
             if (!btnPressed) {
                 state = START;
-                handleEvent(BUTTON_SEQUENCE_END);
+                handleEvent(ButtonEventId::BUTTON_LONG_PRESS_FAIL);
+                //handleEvent(ButtonEventId::BUTTON_SEQUENCE_END);
                 return;
             }
             return;
@@ -94,7 +96,7 @@ public:
         case WAIT_LONG_RELEASE:
             if (!btnPressed) {
                 state = START;
-                handleEvent(BUTTON_SEQUENCE_END);
+                //handleEvent(ButtonEventId::BUTTON_SEQUENCE_END);
                 return;
             }
             return;
@@ -110,9 +112,9 @@ public:
             if (currentPeriod >= SHORT_PRESS_THRESHOLD) {
                 state = START;
                 if (shortPressesCounter <= 5) {
-                    handleEvent(static_cast<Event>(BUTTON_PRESSED_1X + shortPressesCounter - 1));
+                    handleEvent(static_cast<ButtonEventId>(static_cast<uint8_t>(ButtonEventId::BUTTON_PRESSED_1X) + shortPressesCounter - 1));
                 }
-                handleEvent(BUTTON_SEQUENCE_END);
+                //handleEvent(ButtonEventId::BUTTON_SEQUENCE_END);
                 return;
             }
             return;
@@ -121,7 +123,7 @@ public:
             // If button pressed too long => bad sequence of short dials
             if (btnPressed && currentPeriod >= SHORT_PRESS_THRESHOLD) {
                 state = START;
-                handleEvent(BUTTON_SEQUENCE_END);
+                //handleEvent(ButtonEventId::BUTTON_SEQUENCE_END);
                 return;
             }
         
@@ -146,7 +148,7 @@ private:
     };
 
     Driver driver;
-    void (*eventHandler)(Event);
+    void (*eventHandler)(ButtonEventId);
 
     State state;
     bool unfilteredBtn;
@@ -157,7 +159,7 @@ private:
     uint32_t currentPeriod;
     uint8_t shortPressesCounter;
 
-    void handleEvent(Event event) {
+    void handleEvent(ButtonEventId event) {
         if (eventHandler) eventHandler(event);
     }
 };
