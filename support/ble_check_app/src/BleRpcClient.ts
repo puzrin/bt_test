@@ -44,8 +44,11 @@ export class BleRpcClient {
     private static readonly RPC_CHARACTERISTIC_UUID = '5f524546-4c4f-575f-5250-435f494f5f5f'; // _REFLOW_RPC_IO__
     private static readonly AUTH_CHARACTERISTIC_UUID = '5f524546-4c4f-575f-5250-435f41555448'; // _REFLOW_RPC_AUTH
 
+    log: (...data: any[]) => void = () => {};
+    log_error: (...data: any[]) => void = () => {};
+
     constructor() {
-        this.loop().catch(console.error);
+        this.loop().catch(this.log_error);
     }
 
     isConnected() { return this.isConnectedFlag && this.gattServer?.connected === true; }
@@ -65,7 +68,7 @@ export class BleRpcClient {
 
     async selectDevice(once = false) {
         if (once && this.device) {
-            console.log('Device already found.', this.device);
+            this.log('Device already found.', this.device);
             return;
         }
 
@@ -113,7 +116,7 @@ export class BleRpcClient {
                         this.emitter.emit('connected');
                     }
                 } catch (error) {
-                    console.error('Error:', error);
+                    this.log_error('Error:', error);
                 }
             }
 
@@ -132,7 +135,7 @@ export class BleRpcClient {
                         this.emitter.emit('need_pairing');
                     }
                 } catch (error) {
-                    console.error('Error:', error);
+                    this.log_error('Error:', error);
                 }
             }
 
@@ -142,7 +145,7 @@ export class BleRpcClient {
 
     private async connect(): Promise<Array<BluetoothRemoteGATTCharacteristic>> {
 
-        console.log(`Connecting to GATT Server on ${this.device?.name}...`);
+        this.log(`Connecting to GATT Server on ${this.device?.name}...`);
 
         this.gattServer = (await this.device?.gatt?.connect()) ?? null;
         if (!this.gattServer) {
@@ -163,7 +166,7 @@ export class BleRpcClient {
             throw new Error('Failed to get characteristics.');
         }
 
-        console.log('BLE connected (but needs authentication to become ready)');
+        this.log('BLE connected (but needs authentication to become ready)');
         return [rpcCharacteristic, authCharacteristic];
     }
 
@@ -178,7 +181,7 @@ export class BleRpcClient {
             if (!secret) {
                 if (!auth_info.pairable) return false;
 
-                console.log('Try to pair...');
+                this.log('Try to pair...');
 
                 const new_secret  = await this.authCaller.invoke('pair', client_id) as string;
                 this.authStorage.setSecret(device_id, new_secret);
@@ -186,26 +189,26 @@ export class BleRpcClient {
                 // Re-fetch new hmac message value
                 auth_info = JSON.parse(await this.authCaller.invoke('auth_info') as string);
 
-                console.log('Paired!');
+                this.log('Paired!');
             }
 
-            console.log('Authenticating...');
+            this.log('Authenticating...');
 
             const signature = await this.authStorage.calculateHMAC(auth_info.hmac_msg, secret);            
             const authenticated = await this.authCaller.invoke('authenticate', client_id, signature, Date.now()) as boolean;
 
             if (!authenticated) {
                 // Wrong key. Drop it.
-                console.log('Wrong auth key. Clearing...');
+                this.log('Wrong auth key. Clearing...');
 
                 this.authStorage.setSecret(device_id, '');
                 return false;
             }
 
-            console.log('Ready!');
+            this.log('Ready!');
             return true;
         } catch (error) {
-            console.error('Error:', error);
+            this.log_error('Error:', error);
         }
 
         return false;
@@ -221,7 +224,7 @@ export class BleRpcClient {
     }
 
     private async handleDisconnection(): Promise<void> {
-        console.log('Disconnected from GATT server.');
+        this.log('Disconnected from GATT server.');
         this.cleanup();
         this.emitter.emit('disconnected');
     }
